@@ -1,0 +1,124 @@
+%define default_prefix /opt/nsn
+%define pkg trace
+
+Summary: NSN SOA trace library
+Name: nsn%{pkg}
+Version: ##__VERSION__##
+Release: ##__RELEASE__##
+License: Commercial
+Group: Development/Libraries
+URL: http://kaivuri.emea.nsn-net.net
+Source0: %{name}-%{version}.tar.gz
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
+Prefix: %{default_prefix}
+Requires: nsnsoabase
+
+%package devel
+Summary: Header files and static library for the NSN SOA trace library.
+Group: Development/Libraries
+
+%package doc
+Summary: Documentation for the NSN SOA trace library.
+Group: Documentation
+
+%package php
+Summary: PHP bindings for the NSN SOA tracing library.
+Group: Development/Languages
+# The required PHP version is completely from my sleeve... should
+# be tested.
+Requires: php >= 5.1.6
+Requires: php-pear
+BuildRequires: php-devel
+
+%package python
+Summary: Python bindings for the NSN SOA tracing library.
+Group: Development/Languages
+Requires: python >= 2.4
+BuildRequires: python-devel
+
+%description
+The NSN SOA trace library provides a common low-level tracing interface
+for all internally developed C/C++ components.
+
+%description devel
+NSN SOA trace library header file(s) and the static library.
+
+%description doc
+Documentation, including manual pages, for the NSN SOA trace library.
+
+%description php
+These PHP bindings add support for using the NSN SOA tracing library
+from PHP programs.
+
+%description python
+These Python bindings add support for using the NSN SOA tracing library
+from Python programs.
+
+%prep
+%setup -q -n %{pkg}
+
+%build
+make DESTDIR= PREFIX=%{prefix} VERSION=%{version} debug=yes all
+
+%install
+[ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
+make DESTDIR=$RPM_BUILD_ROOT PREFIX=%{prefix} VERSION=%{version} install
+
+%clean
+[ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
+
+%post php
+if which php-config >& /dev/null; then
+    php_prefix="`php-config --prefix`"
+fi
+[ -z "$php_prefix" ] && php_prefix="/usr"
+
+if [ "$php_prefix" != "$RPM_INSTALL_PREFIX" ]; then
+    ln -sf $RPM_INSTALL_PREFIX/etc/php.d/nsn%{pkg}.ini /etc/php.d
+fi
+
+%postun php
+rm -f /etc/php.d/nsn%{pkg}.ini
+
+%files
+%defattr(-,root,root,-)
+%{prefix}/lib/lib%{pkg}.so
+
+%files devel
+%defattr(-,root,root,-)
+%{prefix}/include/%{pkg}
+%{prefix}/lib/lib%{pkg}.a
+%{prefix}/lib/pkgconfig/nsn%{pkg}.pc
+
+%files doc
+%defattr(-,root,root,-)
+%doc %{prefix}/share/doc/nsn%{pkg}-%{version}
+%doc %{prefix}/share/man/man3/lib%{pkg}.3
+
+%files php
+%defattr(-,root,root,-)
+%{prefix}/lib/php/modules/nsn%{pkg}.so
+# fsck, this btw breaks relocatability...
+%{prefix}/etc/php.d/nsn%{pkg}.ini
+
+%files python
+%defattr(-,root,root,-)
+%{prefix}/lib/python*/site-packages/*nsn%{pkg}*
+
+
+%changelog
+* Wed Nov 01 2007 Krisztian Litkey <krisztian.litkey@nsn.com> - 
+- added Python binding subpackage
+
+* Wed Oct 17 2007 Krisztian Litkey <krisztian.litkey@nsn.com> - 
+- added php binding subpackage
+
+* Thu Oct 04 2007 Krisztian Litkey <krisztian.litkey@nsn.com> - 
+- added missing list.h header
+- added shared library
+- separated static library, header(s), pkgconfig file to devel subpackage
+- separated documentation to doc subpackage
+
+* Thu Sep 27 2007 Krisztian Litkey <krisztian.litkey@nsn.com> - 
+- Initial build.
+

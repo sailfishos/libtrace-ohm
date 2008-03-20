@@ -1,0 +1,170 @@
+Don't read me... Read the manual page, instead.
+
+
+
+
+
+This is old stuff....
+
+
+Library Initialization and Cleanup
+
+int  trace_init(void);
+void trace_exit(void);
+
+
+Creating and Destroying a Trace Context
+
+int  trace_open(trace_context_t *tc, char *name);
+void trace_close(trace_context_t *tc);
+
+trace_open initializes a trace context. A context must always
+be initialized before it can be used. trace_close cleans up
+the context. The context cannot be used after it has been
+closed (unless it is reinitialized with trace_open).
+
+
+Registering a Component (ie. a set of trace flags)
+
+trace_add_component(trace_context_t *tc, trace_component_t *c);
+trace_del_component(trace_context_t *tc, trace_component_t *c);
+
+A component is merely a set of trace flags. During registration globally
+unique IDs get dynamically allocated and assigned to the components trace
+flags. Components are registered using trace_add_component and unregistered
+by trace_del_component. Once a component is unregistered its trace flags
+cannot be used to produce trace messages.
+
+
+Configuring Trace Output
+
+int trace_set_destination(trace_context_t *tc, const char *to);
+int trace_enable(trace_context_t *);
+int trace_disable(trace_context_t *);
+
+
+Trace messages can be directed to stdout, stderr, or to a file. Use
+trace_set_destination to select the destination for a context. trace_enable
+and trace_disable enable and disable all messages for a context without
+touching the trace flags or filters. This is useful to preconfigure tracing
+(flags and filters), temporarily suppress messages until your application
+hits a critical point then enable messages again.
+
+int trace_on(trace_context_t *tc, int flag);
+int trace_off(trace_context_t *tc, int flag);
+
+Messages corresponding to inidividual trace flags can be enabled and
+disabled by trace_on and trace_off. Note that trace messages are subject
+to tag-based filtering in addition to flag-based filtering.
+
+
+Producing Trace Messages
+
+void trace_write(trace_context_t *tc, int flag, trace_tag_t *tags,
+                 const char *fmt, ...);
+
+Trace messages are produced by trace_write. This will produce a message
+according to the printf(3)-like format string fmt and the remaining
+arguments following it. flag defines the trace flag (ie. type or class)
+this message corresponds to.
+
+Trace messages are subject to three levels of filtering: global filtering,
+flag-based filtering, and tag-based filtering.
+
+Global Filtering
+
+If tracing is not enabled for the context by calling trace_enable the message
+is suppressed. trace_write is actually a macro. To minimize runtime overhead,
+no function call takes place if tracing for the context is globally disabled.
+
+Flag-based Filtering
+
+If tracing is off for the given flag, the trace message is immediately
+suppressed.
+
+Tag-based filtering
+
+The tags supplied with the message are checked against the set of filters.
+If any of the filters match, the message is printed, otherwise it is
+suppressed.
+
+
+Filter Configuration
+
+void trace_reset_filters(trace_context_t *tc);
+int  trace_add_simple_filter(trace_context_t *tc, trace_tag_t *tags);
+int  trace_del_simple_filter(trace_context_t *tc, trace_tag_t *tags);
+int  trace_add_regexp_filter(trace_context_t *tc, trace_tag_t *tags);
+int  trace_del_regexp_filter(trace_context_t *tc, trace_tag_t *tags);
+
+#if 0
+int  trace_add_filter(trace_context_t *tc, trace_tag_t *tags, int type);
+int  trace_del_filter(trace_context_t *tc, trace_tag_t *tags, int type);
+
+enum {
+     TRACE_SIMPLE_FILTER = 0,
+     TRACE_REGEXP_FILTER
+};
+#endif
+
+
+Trace Configuration Parser
+
+There is a builtin configuration parser that provides functions for
+configuring global, flag-based and tag-based filtering. These functions
+take a string (obtained in an application-specific way), parse it
+and modify the configuration accordingly.
+
+"[trace] context.comp=[+|-]flag1,[+|-]flag2,...;", eg.
+
+
+
+
+
+
+
+
+Old stuff...
+
+
+
+Background
+
+The main job of the tracing library is to allow applications and components
+to produce debugging messages. The set of messages to produce/suppress
+is dynamically selectable during runtime.
+
+Most non-trivial applications are constructed from a set of existing
+more or less reusable generic components and some application-specific
+logic. 
+
+
+Model
+
+An application consists of components. Each of its components can have
+a set of trace flags. Using these trace flags one can control what kind
+of debugging messages the components (and thus the application) is producing.
+Flipping an individual trace flag of a component controls whether a
+corresponding class of debugging messages is suppressed or produced by
+that particular component instance. Typical examples of such classes
+could be for instance call control logic, communication, or memory
+allocation.
+
+In any non-trivial application, the amount of overall possible tracing
+messages tends to be enormous. Producing such an amount of messages would
+change the dynamic bahaviour of the application completely. Performance
+degrades and the timing of events changes as the amount of trace messages
+grow. This makes reproducing known or observed erroneous behaviour
+dangerous (leading to system crashes), difficult (changes in timing
+prevents certain bugs from being triggered), or both. Thus fine grained
+control is needed over exactly which and what kind of messages are produced.
+
+Turning on communication tracing in one component should not necessarily
+turn on communication tracing in all other components of the same application.
+One possible approach to accomplish this, and the one used by this library,
+is to provide a hierarchical namespace of trace flags.
+
+The trace library itself is meant to be a reusable and generic component
+itself. To avoid the need of knowing all the trace flags of all the
+possible components used in an application a priori, the library provides
+a way for dynamic trace flag registration.

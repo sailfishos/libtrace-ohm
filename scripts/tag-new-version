@@ -1,0 +1,165 @@
+#!/bin/bash
+
+####################
+# repo_topdir - get the repo top directory
+repo_topdir () {
+    local _top
+
+    pushd `pwd` >& /dev/null
+    while [ ! -d .git -a "`pwd`" != "/" ]; do
+        cd ..
+    done
+
+    [ -d .git ] && _top="`pwd`" || _top=""
+    popd >& /dev/null
+
+    echo $_top
+    [ -n "$_top" ] && return 0 || return 1
+}
+
+
+####################
+# fatal - emit a fatal error message and exit
+fatal () {
+    local _ec="$1" _msg
+    shift
+
+    _msg="$*"
+    echo "${0##*/}: fatal error: $_msg" 1>&2
+    exit $_ec
+}
+
+
+
+###################################
+# main script
+
+# determine repository top directory and pull in the necessary script libs
+if ! TOP="`repo_topdir`"; then
+    fatal 1 "failed to determine repository directory."
+fi
+
+SCRIPTS=$TOP/scripts
+. $SCRIPTS/scm-lib
+
+
+#
+# set up defaults
+#
+
+type=""                            # use last type (RC, TEST, or RELEASE) found
+bump="patch"                       # bump the patch version number
+commit="no"                        # don't commit, bail out instead
+version=""                         # bump the last version found
+dryrun="no"                        # do it for real, don't just show
+xeq=""                             # ditto, don't just echo
+
+#
+# parse the command line
+#
+
+while [ "${1#-}" != "$1" -a -n "$1" ]; do
+    opt="$1"; shift
+    case $opt in
+        --help) echo "helpyourselfish..."; exit 0;; # later...
+        --release|-r)    type="RELEASE";;
+        --candidate|-rc) type="RC";;
+        --test|-t)       type="TEST";;
+        --bump-major)    bump="major";;
+        --bump-minor)    bump="minor";;
+        --bump-patch)    bump="patch";;
+        --version|-v)    version="$1"; shift;;
+        --commit)        commit="yes";;
+        --dry-run|-n)    dryrun="yes"; xeq=echo;;
+        *) fatal 1 "unrecognized command line option \"$opt\"";;
+    esac
+done
+
+
+#
+# determine last known version
+#
+
+if last_tag="`$SCRIPTS/scm/find-version-tag -q`"; then
+    last_tag="${last_tag##*/}"                    # remove the prefix
+    last_type="${last_tag%%_*}"
+    last_version="${last_tag##*_}"
+else
+    last_type=""
+    last_version=""
+fi
+
+#echo "last version: $last_version"
+#echo "last type: $last_type"
+
+
+#
+# check given version, or bump the last one found
+#
+
+if [ -n "$version" ]; then
+    # check version format
+    case $version in
+        *.*.*) ;;
+            *) fatal 1 "malformed version number given: $version";;
+    esac
+    
+    # make sure versions are monotonically increasing
+    newer_version $last_version $version
+    if [ $? != 2 -a -n "$type" ]; then
+        newer_type $last_type $type
+        if [ $? != 2 ]; then
+            fatal 1 "($type,$version <= last $last_type,$last_version)."
+        fi
+    fi
+else
+    if [ -n "$last_version" ]; then
+        major="`version_major $last_version`"
+        minor="`version_minor $last_version`"
+        patch="`version_patch $last_version`"
+
+        case $bump in
+            major) let major=$major+1; minor=0; patch=0;;
+            minor) let minor=$minor+1; patch=0;;
+            patch) let patch=$patch+1;;
+                *)
+        esac
+        version="$major.$minor.$patch"
+        [ -z "$type" ] && type="$last_type"      # default to previous type
+    else
+        version=$FIRST_VERSION_EVER
+        [ -z "$type" ] && type=TEST
+    fi    
+fi
+
+# check for uncommitted changes
+if ! git diff --quiet .; then
+    if [ "$commit" = "no" ]; then
+        fatal 1 "Refused to tag, uncommitted changes (see git diff .)..."
+    else
+        $xeq git commit . || \
+            fatal 2 "could not commit outstanding changes"
+    fi
+fi
+
+# determine component path/name and hostname (for logging)
+if ! c="`component`"; then
+    c="`pwd`"
+    prefix=""
+else
+    prefix="$c/"
+fi
+
+host="`hostname`"
+case "$host" in
+    ""|"(none)") host=unknown;;
+    *) ;;
+esac
+
+# add new release tag
+tag="${prefix}${type}_$version"
+[ "$dryrun" = "no" ] && echo "Tagging component $c with $tag..."
+$xeq git tag -a -m "$USER@$host tagged $c with $tag." $tag . || \
+    fatal 2 "failed to add new tag $tag"
+
+exit 0

@@ -1,0 +1,584 @@
+commit b7aae57348e8ddbb7facb4071de52851fb832e5e
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Dec 17 09:18:58 2007 +0200
+
+    set LD_LIBRARY_PATH correctly when generating the test check file
+
+commit f71a770f6cf5842ed05c76a4566847aeebc7b9fc
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Dec 13 00:30:10 2007 +0200
+
+    If tracing to a file, close the file upon trace_close.
+    
+    This should take care of apache running out of file descriptors when
+    it hosts myco.
+
+commit a10b91623318633a126ddb359b8172dcc1d77270
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Dec 12 19:25:11 2007 +0200
+
+    libs/{log,trace}/Makefile more generalization.
+
+commit f4afdff3be529bec1187f7623a9afd317db4660d
+Merge: cf879a4... 200600d...
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Dec 11 21:09:07 2007 +0200
+
+    Merge branch 'master' of ssh+git://kli@kaivuri.emea.nsn-net.net/u/git-repository/soa-repo
+
+commit 9d01303ba49c21f63fe1147aaf8ab0e6414a33f2
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Dec 11 21:06:58 2007 +0200
+
+    SPEC file is now generated from a template (because of versioning).
+
+commit 47d19461df398803faf81ceae19d2fda66345307
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Dec 11 20:45:40 2007 +0200
+
+    Unified with the versioning-capable log Makefiles.
+
+commit 55dd1cd29c0cedfdb0832206711e545b3b1f9d5b
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Dec 11 12:48:13 2007 +0200
+
+    sed 's/trace_reset_filter/trace_reset_filters/g'
+
+commit e796d1a1c4a8e6f7c009105451f6b786bc2db2ba
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sun Dec 9 21:07:07 2007 +0200
+
+    Added Python bindings unittest.
+
+commit d74e5daaa79f3bf2a69e140bc257257448de3775
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sun Dec 9 18:46:15 2007 +0200
+
+    Context name is now correctly freed and resetted upon trace_close.
+
+commit 1e6f9f8d2fe2812d235ae382389e0f7d2e810c52
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sun Dec 9 18:42:59 2007 +0200
+
+    Small filtering fixes (catch-all reset), reset_filters exposed to bindings.
+    
+    trace_reset_filters now correctly resets the catch-all (TRACE_FILTER_ALL_TAGS)
+    flag. trace_reset_filter is now added to the bindings. headers string is now
+    correctly strdupped.
+
+commit 7def57dab5942a0b910ba89c8d3d7f8ec63c9f78
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sun Dec 9 18:40:11 2007 +0200
+
+    Small Makefile fixes (force-delete symlinks before creating them).
+
+commit ca7cc2d03c83297077b76c23733cde3437151c5b
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sun Dec 9 18:36:53 2007 +0200
+
+    Added unittests and a robot wrapper for the tests.
+
+commit 2826b30ad84916d702f689750c325954f243ed53
+Author: root <root@nosse.emea.nsn-net.net>
+Date:   Wed Dec 5 15:15:14 2007 +0200
+
+    PREFIX defaults to /opt/nsn. install fix for idmap/bindings/python.
+
+commit 075acf89f45e1ebf4b30b16d2ef65cbf0d71ebab
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Dec 3 18:20:25 2007 +0200
+
+    Hardcoded empty tagset filter removed. Special filter "all" implemented.
+    
+    There are two sepcial filters "all", and "empty". The former matches all
+    tagsets (including the empty one), the latter matches just the empty
+    tagset. "none" is not needed, as that is equivalent of disabling tracing
+    and/or resetting the filters.
+
+commit e973ddc7618949b04aa6049499811e70fa5032ea
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Dec 3 09:23:31 2007 +0200
+
+    Top-level libs/{trace,log}/Makefile bails now out on sub-$(MAKE) errors.
+
+commit b1fd161a72d3227dd83e5a8617fc33bc651a69b3
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sat Dec 1 19:22:01 2007 +0200
+
+    distclean in doc/Makefile now generate ChangeLog
+    
+    This might seem counterintuitive but if you think about it you
+    make distclean before rolling a tarball or building an RPM (which
+    if done with make rpm indeed makes distclean then rolls atarball).
+    Maybe it would be cleaner/nicer to have a separate target for the
+    ChangeLog and explicitly $(MAKE) it from the toplevel Makefiles
+    rpm-target, but it just isn't worth the effort. It is much simpler
+    this way.
+
+commit b1d100e954e07a3d629b2f72bb03cba6fe0bfa0f
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Nov 27 11:35:58 2007 +0200
+
+    pkg-config *.pc jhbuild hack.
+    
+    Introduced make variable JHBUILDDESTDIR. It is included in the generated
+    PREFIX path used in pkg-config .pc-files.
+
+commit 43b3fe7ede54cb9da2ee427eaf6c35b276d829c9
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Nov 27 02:10:13 2007 +0200
+
+    Updated libraries to require nsnsoabase and have less post{,un}install cruft.
+
+commit 9710ee24e94b5b1c3b4a36ce8ec0df745583eb5e
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Nov 26 21:06:31 2007 +0200
+
+    Log/trace filtering updates. nsnlog.php now provides configurable filtering.
+
+commit 2bb4e113ee2db812d8abbb40ea342a2cf00033d7
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sun Nov 25 23:56:41 2007 +0200
+
+    Added trace_del_regexp_filter and trace_del_simple_filter.
+
+commit 2f4c6967a16fe1d7f0d2a994129d205b9a15a14a
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Sat Nov 24 03:38:31 2007 +0200
+
+    make rpm now generates source rpms as well.
+
+commit 4db4cc43249274cd92c47af78aac5aa8a42ddbfc
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 23 14:43:22 2007 +0200
+
+    Handle NULL (aka TRACE_NO_TAGS) in trace_add_*_filter.
+
+commit 270a6d673caf9adcc06187bd93db3adcf637b3e3
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 23 13:48:05 2007 +0200
+
+    Embrionic trace filtering API in bindings and the simplified API.
+
+commit 42f62a516ef213f3f1074c7e0108e43c765f46cc
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 23 00:49:35 2007 +0200
+
+    Filter adding routines now take strings and parse them internally.
+    
+    The old (parse filter to tags, then add the resulting tags as a filter)
+    interface was too awkward to expose as an interface. It happens now
+    behind the scenes and the exposed interface is simply
+    trace_add_{simple,regexp}_filter(context, filter_string). This is also
+    very easy to add to the bindings (because it is string-based).
+
+commit 324de7ec912978530b15feb6772ee7462dd312b2
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 23 00:32:41 2007 +0200
+
+    Filter parser tests added.
+
+commit 1f907b7f862e92e01b853119dfc58682a9ed7628
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 23 00:32:14 2007 +0200
+
+    Added a filter (string to tag) parser.
+    Added a filter (string to tag) parser.
+    
+    To install a new filter (simple or regexp), get the filter string,
+    feed it to the parser (trace_parse_filter), and feed the resulting
+    tag to the appropriate (ie. simple or regexp) filter installer routine.
+    
+    Hmm... this is somewhat awkward. I think I might change this to
+    get filter string and call appropriate filter installer (which in
+    turn will first call the parser then do the deed...).
+
+commit 355568eadcea2e937ddce64b6947fb45e300d462
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 22 18:57:15 2007 +0200
+
+    Removed leftover trace_filter_t.
+
+commit 18a80b1e99ca8e18260017b8a613b30097a48c33
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 22 18:53:56 2007 +0200
+
+    More consistent simple/regexp filters.
+
+commit 02e85db23207608e3df4b8ec0876e7569a9c6ae0
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 22 09:32:59 2007 +0200
+
+    Use --root only when DESTDIR is not empty.
+
+commit c0cb8ff420af10759c707fbbae2893328134b361
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Nov 21 22:47:21 2007 +0200
+
+    Test code hack for regexp filter testing.
+
+commit 49243205b781e8d02233f5f574198ccd71230fc1
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Nov 21 22:33:03 2007 +0200
+
+    First attempt at regexp filtering.
+    
+    Only slow path implemented, total brute force linear check of filters.
+    Like for simple filters no string->filter parser yet.
+
+commit 977253838bffaa159a3dc366ca99e6e0ef3b7f44
+Author: Jouko Savelainen <joukosa@asgard.emea.nsn-net.net>
+Date:   Mon Nov 19 11:02:22 2007 +0200
+
+    PREFIX defaults to /opt/nsn only if not overridden before.
+
+commit 79c8e492cbbd0a8e4cbec5d632c1253ad1d01eea
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Nov 13 03:22:07 2007 +0200
+
+    Small clarifying comments.
+
+commit ab076249ce51e7827727140e74ed6238efb3f742
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Nov 13 03:21:40 2007 +0200
+
+    Small clarifying change, safer call to rm -f (without -r for symlinks).
+
+commit ab97b441252f264c9c354a37a32362ed25619052
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Nov 12 17:46:55 2007 +0200
+
+    Exported __trace_write to Python.
+
+commit e4be5b0132788eeb97b86d34c0ecad13df8d7834
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Nov 12 17:45:50 2007 +0200
+
+    Default prefix like for libs/log.
+
+commit 0302e323beb33ca50049a81a464ddac579078865
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Nov 12 16:46:22 2007 +0200
+
+    Added nsntrace.ini for the trace PHP bindings.
+
+commit 17d36042368419448a14914417abc4cee484ff9d
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Nov 12 09:48:08 2007 +0200
+
+    nsntrace.ini is now used to load the extension.
+
+commit 54d050e9cd80e065916c18e478b96654ee2a8bf2
+Author: Mikko Sarmanne <sarmanne@thor.emea.nsn-net.net>
+Date:   Fri Nov 9 16:00:42 2007 +0200
+
+    - use empty destdir when building
+
+commit ab2079fe8cdd4795fe9f23c81542a294ad94a4da
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Nov 7 18:56:02 2007 +0200
+
+    Post(un)installation scriptlets more adaptive to the python/PHP environment.
+    
+    - use PHP/python to find out how those are actually configures and adapt to it
+
+commit da25a24d19b9ee4effa785eacd62f53ecb93725d
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Nov 7 01:19:52 2007 +0200
+
+    Added __trace_write to the bindings.
+    
+    In addition to the normal parameters __trace_write takes the location (ie.
+    file, line, function) as explicit parameters instead of finding it out by
+    examining the stack. This comes handy when building an abstraction/envelope-
+    layer on top of the low-level API-functions, where one wishes to show the
+    location of the topmost abstraction-layer function instead of the bottom-
+    most in the stack. See nsnlog.php::trace as an example.
+
+commit 1c3f3e8df72c98a34b14f6510511b9c1eca659fd
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Nov 7 00:47:14 2007 +0200
+
+    Substitute "" for NULL tag values (some people just don't seem to get it).
+
+commit 2fe648c577b088e73c8e0a4d7ec0e35eb8867792
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Nov 6 22:58:47 2007 +0200
+
+    Trace/log PHP binding fixes (tested with myco).
+    
+    - several fixes to the logging and tracing PHP bindings discovered while
+      testing with myco for the first tim
+    - some API simplifications (most functions now simply return TRUE/FALSE as
+      returning an error-code is somewhat extravagant and pretty useless in PHP)
+
+commit 18eeef2a3be0a692dd57f9d07a88f81002ec868e
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Nov 5 13:53:01 2007 +0200
+
+    Distclean now recursively distcleans.
+
+commit d30d68a0cb23f5ac84dddeaf1d881273d96e4e95
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 2 21:29:25 2007 +0200
+
+    Log/trace binding fixes.
+
+commit 44db9e6a6a000a0e9df0235d87ffec70d23e450d
+Merge: 2a7e33e... e5685bc...
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 2 11:44:54 2007 +0200
+
+    Merge branch 'master' of git+ssh://kli@kaivuri.emea.nsn-net.net/u/git-repository/soa-repo
+
+commit c9c2fd153deb699228eae276980adc2eb77fe21f
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Fri Nov 2 11:43:23 2007 +0200
+
+    Do not Require: php-common for the bindings
+
+commit e5685bc9f317b04bd655f51601f7157386c0f734
+Merge: b2dd31f... 2497ad2...
+Author: Mikko Sarmanne <sarmanne@thor.emea.nsn-net.net>
+Date:   Fri Nov 2 11:17:20 2007 +0200
+
+    Merge branch 'master' of git+ssh://sarmanne@kaivuri.emea.nsn-net.net/u/git-repository/soa-repo
+    
+    Conflicts:
+    
+    	libs/log/Makefile
+    	libs/trace/Makefile
+
+commit 7d941ed49e625d488f89db069e463bed19fbac28
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 20:56:48 2007 +0200
+
+    - Python binding Makefile sanitization.
+    
+    Makefiles for the log, trace, and alarm library python bindings are
+    now unified. They all use distutils for building, installing and cleanup.
+
+commit b3fa2083dd8e1c0f70c1fcbaf06898caf5c7ee53
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 19:20:41 2007 +0200
+
+    You guessed it... even more python binding packaging fixes.
+
+commit e57d257a272cb4cbe481c8311180da07a110077b
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 19:12:55 2007 +0200
+
+    Create the pythonishly correct python binding site-package directory.
+
+commit d454d723cd4603d348af28bc555cd893ccaa91ca
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 19:05:18 2007 +0200
+
+    Python binding backward-compatibility fix for Python 2.4.x.
+
+commit 124ee9495a4a4dab196f79d8d77db8cfafcfdaa9
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 19:03:38 2007 +0200
+
+    Packaging fixes of the library bindings for older Python versions.
+
+commit 5aa16b73070409fce5496ee45986b7702dbe9927
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 14:14:34 2007 +0200
+
+    Packaging fixes for trace library bindings.
+
+commit d5d530075a0a004607c791dd5a6b3e006e82244d
+Author: Mikko <mikko@cs-imob.(none)>
+Date:   Thu Nov 1 13:20:58 2007 +0200
+
+    - make target rpms -> rpm
+
+commit 5d4df75d6770da1b610a53751033d6bdd7510dbf
+Merge: 8211dcc... 3d4c3bd...
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 11:42:26 2007 +0200
+
+    Merge branch 'master' of git+ssh://kli@kaivuri.emea.nsn-net.net/u/git-repository/soa-repo
+
+commit d465e83deb826ea6e2643c52874b2a848707f0c1
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Nov 1 01:17:40 2007 +0200
+
+    Python binding subpackage added to the generated RPMs.
+
+commit a126d905577b2bee3287a99e599dd52ce9d354e8
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Oct 31 21:27:26 2007 +0200
+
+    Preliminary version of the trace library Python bindings.
+
+commit 78556498bb2175823057fe7110c6d0efdd463078
+Merge: 415a269... 49ab1d2...
+Author: Mikko Sarmanne <sarmanne@thor.emea.nsn-net.net>
+Date:   Wed Oct 31 10:19:51 2007 +0200
+
+    Merge branch 'master' of git+ssh://sarmanne@kaivuri.emea.nsn-net.net/u/git-repository/soa-repo
+    
+    Conflicts:
+    
+    	components/build/Makefile
+
+commit 32fe87b1b94739e0817c40b44f870ec5b3b9887f
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Oct 29 17:16:07 2007 +0200
+
+    First version of the trace library PHP bindings.
+
+commit fd97b0e5458b6cbf0ca9c7973f9ed9168d4d58e8
+Author: Mikko <mikko@cs-imob.(none)>
+Date:   Fri Oct 26 11:49:03 2007 +0300
+
+    - use DESTDIR/PREFIX instead of just PREFIX in .pc, works quite nicely
+
+commit 95496c13495d56f8f5cb769ca08a268e4ca782b3
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Oct 23 15:51:52 2007 +0300
+
+    Packaging fixes to the log and trace libraries and their bindings.
+    
+    - autoadd/delete /etc/ld.so.conf.d/nsn{log,trace}.conf if appropriate
+    - install nsnlog.php under %{prefix}/share/php and symlink it to the
+      corresponding system-wide place
+
+commit 94bc664f52da7013c39a42dccc434db88d361159
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Tue Oct 23 02:13:57 2007 +0300
+
+    - more complete PHP bindings for the trace library
+    
+    This is still embrionic/probably buggy but you can now actually
+    produce trace messages using the PHP bindings.
+
+commit 4fff58ec42c5b325f9b340e77457909a84f5c71a
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Oct 22 18:29:33 2007 +0300
+
+    - call trace_del_component from trace_close according to the new API...
+
+commit 7ff3364139c20cddda2fb4d29b051805919d334a
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Mon Oct 22 18:19:44 2007 +0300
+
+    - trace PHP bindings progressing
+    
+    - init/exit, open/close, {add,del}_component added
+    - small trace API change to more sensible trace_del_component
+
+commit 99641378f5c35e821b3c9172a31502e10de8cb24
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Oct 4 13:40:28 2007 +0300
+
+    - log and trace libraries generate now shared libraries (versioning still
+      missing)
+    - packaging separated to basic, devel, and doc packages
+
+commit 1e61591bcd6b4fe1d02afad0ef696592dabdd94b
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Oct 4 10:46:28 2007 +0300
+
+    - embrionic packaging of the trace library (identical to that of the
+      log library)
+
+commit 537621ecf088c35e11f6f93db97741532ee92034
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Oct 4 02:35:02 2007 +0300
+
+    - update to the manual page (convenience macros for tagset manipulation)
+
+commit 32bb5aa31f66442471fe660d0475c037b57481df
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Oct 4 00:49:57 2007 +0300
+
+    - first attempt at the manual page (basic interface documented)
+
+commit bc3efac8f5dabff7c7bf4c813ead2b2c8693b35b
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Thu Oct 4 00:48:16 2007 +0300
+
+    - simplified TRACE_DECLARE_TAGS interface
+    - some other small API cleanups
+
+commit 47a083e7c5234cdfbba4cadc94c96271d3516635
+Author: Krisztian Litkey <krisztian.litkey@nsn.com>
+Date:   Wed Oct 3 01:10:10 2007 +0300
+
+    - embrionic trace flag configuration (string) parser
+    - another example (fibonacci / prime)
+
+commit b712ac38574b6ed177d8b090532df79d67e9ac86
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Tue Sep 25 18:15:27 2007 +0300
+
+    - added simple-filter.[hc]
+    - -D__TRACE_CHECK__ if $(debug)=yes
+
+commit 18f554a802529d7e577f417edb0e377d902dacc9
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Tue Sep 25 15:42:35 2007 +0300
+
+    - changed #ifndef-wrappers to be in line with recommendations (no underscores)
+    - first filtering API functions, brute force simple filter implementation
+
+commit 673526722ec0bf558199eafbff518bc9775bb6e6
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Fri Sep 21 20:29:56 2007 +0300
+
+    - added '%c' formatting directive for component name
+    - small commenting changes
+
+commit 6bb1bb9d99408ec6c6655f55e72d7a033539b900
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Fri Sep 21 20:27:44 2007 +0300
+
+    - added -D__DEBUG__ if debug=yes is passed to make
+
+commit 91d7913acdfadea72baf04b7cd06f0f4750f61b4
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Thu Sep 20 23:35:13 2007 +0300
+
+    - changed default header format to be in sync with the php/python stuff
+      by jml
+
+commit 99b333bafc1b6cab4548c4830d60c88055e08485
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Tue Sep 18 15:01:22 2007 +0300
+
+    - minor cleanups
+    - more configurability
+    - trace flag list generation
+
+commit afa8f953b61a5e2bc511d1e6b0ad65d783b3a57d
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Mon Sep 17 22:25:21 2007 +0300
+
+    - API cleanup:
+      o added library initialization and cleanup routines (trace_init, trace_exit)
+      o context init/cleanup are now called trace_open/trace_close
+    - efficient reverse mapping of trace flags to their registered names
+
+commit 7b6e7bd2d68b6ceba47c4d38e3daf73640ee3f4b
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Fri Sep 14 11:15:41 2007 +0300
+
+    - added trace/doc/README to the repo
+
+commit 1f62c84a921febb7c717e1d9d5636fab109d1aa4
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Fri Sep 14 03:09:27 2007 +0300
+
+    - dynamic component/trace flag registration/unregistration mostly done
+    - enabling/disabling trace flags mostly done
+    - stupid/dummy version of __trace_write for testing
+
+commit f06702c437e2d92afbdb9b47d35439464d2e9a89
+Author: Krisztian Litkey <kli@TP43-1.(none)>
+Date:   Thu Sep 6 17:23:54 2007 +0300
+
+    - shuffled some files around
+    - added sample/test code

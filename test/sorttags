@@ -1,0 +1,25 @@
+#!/bin/bash
+
+while read line; do
+    case "$line" in
+    *{*)
+        #echo "== $line"
+        pref="`echo $line | sed 's/ {.*$//g'`"
+        suff="`echo $line | sed 's/^.*}//g'`"
+        tags="`echo $line | sed 's/^.*{ //g;s/ }.*$//g'`"
+        #echo "=> $pref { $tags } $suff"
+        sorted="`echo $tags | tr -d '{} ' | tr ',' '\n' | sort`"
+        tags=""
+        t=""
+        for tag in $sorted; do
+            tags="$tags$t$tag"
+            t=", "
+        done
+        #echo "<= $pref { $tags } $suff"
+        echo "$pref { $tags } $suff"
+        ;;
+      *)
+        echo "$line"
+        ;;
+    esac
+done

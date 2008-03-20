@@ -1,0 +1,105 @@
+#!/bin/bash
+
+####################
+# repo_topdir - get the repo top directory
+repo_topdir () {
+    local _top
+
+    pushd `pwd` >& /dev/null
+    while [ ! -d .git -a "`pwd`" != "/" ]; do
+        cd ..
+    done
+
+    [ -d .git ] && _top="`pwd`" || _top=""
+    popd >& /dev/null
+
+    echo $_top
+    [ -n "$_top" ] && return 0 || return 1
+}
+
+
+####################
+# fatal - emit a fatal error message and exit
+fatal () {
+    local _ec="$1" _msg
+    shift
+
+    _msg="$*"
+    echo "${0##*/}: fatal error: $_msg" 1>&2
+    exit $_ec
+}
+
+
+###################################
+# main script
+
+# determine repository top directory and pull in the necessary script libs
+if ! TOP="`repo_topdir`"; then
+    fatal 1 "failed to determine repository directory."
+fi
+
+SCRIPTS=$TOP/scripts
+. $SCRIPTS/scm-lib
+
+
+what="##__V__##-##__R__##"                     # by default give full version
+
+#
+# parse the command line
+#
+while [ "${1#-}" != "$1" -a -n "$1" ]; do
+    opt="$1"; shift
+    case $opt in
+        --help) echo "helpyourselfish..."; exit 0;; # later...
+        --version|-v) what="##__V__##";;
+        --release|-r) what="##__R__##";;
+        --full|-f)    what="##__V__##-##__R__##";;
+        *) fatal 1 "unrecognized command line option \"$opt\"";;
+    esac
+done
+
+# find the latest version tag
+if ! latest_tag="`$SCRIPTS/find-version-tag -q`"; then
+    latest_version=$FIRST_VERSION_EVER
+    latest_type=TEST
+else
+    latest_type="${latest_tag%%_*}"
+    latest_version="${latest_tag#*_}"; latest_version="${latest_version%%:*}"
+    case $latest_tag in
+        *:*) commits="${latest_tag#*:}"; commits="${commits%:*}"
+             head="${latest_tag#*:g}";;
+          *) commits=""; head="";;
+    esac
+fi
+
+# check build fragility (ie. whether there are uncommitted changes)
+git diff -b -w --quiet . && fragile="" || fragile="_uncommitted"
+
+#echo "latest tag:  $latest_tag"
+#echo "latest type: $latest_type"
+#echo "latest version: $latest_version"
+#if [ -n "$commits" ]; then
+#    echo "commits: $commits"
+#    echo "head: $head"
+#    echo "fragile: $fragile"
+#fi
+
+# construct the RPM version and release
+rpmversion="$latest_version"
+
+case $latest_type in
+    RELEASE*) type=rc;;       # extra commits turn a release to an RC
+    RC*)      type=rc;;
+    TEST*)    type=test;;
+      *)      type=unknown;;
+esac
+
+if [ -n "$commits" ]; then
+    rpmrelease="${type}_${commits}_$head"
+else
+    rpmrelease="$type"
+fi
+
+rpmrelease="$rpmrelease$fragile"
+
+echo "$what" | sed "s/##__V__##/$rpmversion/g;s/##__R__##/$rpmrelease/g"

@@ -1,0 +1,163 @@
+#!/bin/bash
+#
+# find-version-tag: script to find out the version of a component.
+#
+# In the context of this script a component simply is a subdirectory
+# in a git repository that contains some buildable set of software.
+# Buildabuility is checked by looking for a Makefile and either a
+# packaging subdirectory or a *.spec file. Non-buildable directories
+# are declared to be non-components. The script bails out with an error
+# message when run in a non-buildable directory.
+#
+# The version of a component is derived from the equivalence class of
+# the closest matching tag as reporeted by git. The equivalence class
+# of a tag is all the existing tags that refer exactly to the same
+# commit (ie. tags that are content-wise equivalent with respect to
+# this component/directory). Tags come in three flavours: engineering
+# test tags, release candidate tags, and release tags. Engineering test
+# tags are of the form .*TEST_.*. Release candidate tags are of the
+# form .*RC_.*. Release tags are of the form .*RELEASE.*. All of these
+# can be prefixed by a path specifying a component (== buildable set of
+# software). The longer the prefix matches the relative path from the
+# top if the repository to the directory containing the component the
+# more specific the tag is. For instance:
+#
+#   - sample engineering test tags:
+#     TEST_0.3.1, TEST_0.3.2, libs/TEST_0.3.1, libs/log/TEST_0.3.2
+#
+#   - sample release candidate tags:
+#     RC_0.0.1, RC_0.1, libs/RC_0.1, libs/log/RC_0.2
+#
+#   - sample release tags:
+#     RELEASE_0.0.1, RELEASE_0.1, libs/trace/RELEASE_0.5
+#
+# In the above examples libs/log/RC_0.2 is more specific than libs/RC_0.1
+# and libs/RC_0.1 is more specific than any of the unprefixed tags.
+#
+# This script tries to find the latest of the most specific tags. The notion
+# of 'latest' is currently based on calendar time (see the newer() function
+# below) which might not be a very good idea, especially since tags might
+# be pushed from different machines (with unsynchronized clocks). There is
+# an alternative implementation already in place that chooses the larger
+# version number (see the larger() function below). I might make that the
+# default in the soon future (by replacing the call to newer with a call to
+# larger).
+#      
+# 
+
+
+####################
+# fatal - emit a fatal error message and exit (to stderr)
+fatal () {
+    local _ec="$1"
+    shift
+
+    echo "${0##*/}: fatal error: $*" 1>&2
+    exit $_ec
+}
+
+
+####################
+# warning - emit a warning message (to stderr)
+warning () {
+    echo "${0##*/}: warning: $*" 1>&2
+}
+
+
+####################
+# repo_topdir - get the repo top directory
+repo_topdir () {
+    local _top
+
+    pushd `pwd` >& /dev/null
+    while [ ! -d .git -a "`pwd`" != "/" ]; do
+        cd ..
+    done
+
+    [ -d .git ] && _top="`pwd`" || _top=""
+    popd >& /dev/null
+
+    echo $_top
+    [ -n "$_top" ] && return 0 || return 1
+}
+
+
+####################
+# newer - return the newer of 2 versions (using time stamps)
+newer () {
+    local _v1="$1" _v2="$2" _newer
+
+    [ -z "$GIT" ] && return 1
+    [ ! -e $GIT/refs/tags/$_v1 -o ! -e $GIT/refs/tags/$_v2 ] && return 1
+    [ $GIT/refs/tags/$_v1 -nt $GIT/refs/tags/$_v2 ] && echo $_v1 || echo $_v2
+    return 0
+}
+
+
+
+
+###################################
+# main script
+
+# determine repository top directory and pull in the necessary script libs
+if ! TOP="`repo_topdir`"; then
+    fatal 1 "failed to determine repository directory."
+fi
+
+SCRIPTS=$TOP/scripts
+. $SCRIPTS/scm-lib
+
+quiet=no
+if [ "$1" = "-q" -o "$1" = "--quiet" ]; then
+    quiet=yes
+fi
+
+GITTOP=$TOP/.git
+
+if ! COMPONENT="`component`"; then
+    fatal 1 "failed to determine component path for `pwd`"
+fi
+
+if [ ! buildable ]; then
+    fatal 1 "$COMPONENT does not seem to contain a buildable component"
+fi 
+
+info "git repository directory: $TOP"
+info "this component: $COMPONENT"
+prefix="$COMPONENT/"
+
+
+# determine HEAD and the nearest tag from it
+if ! head="`commit_of HEAD`"; then
+    fatal 1 "failed to determine commit ID of HEAD"
+fi
+
+info "HEAD is $head"
+
+if ! closest="`closest_tag $COMPONENT $head`"; then
+    warning "No existing tags found for $COMPONENT."
+    exit 2
+fi
+
+info "closest tag: $closest"
+
+if ! tag_commit="`commit_of $closest`"; then
+    fatal 2 "Failed to determine commit ID of tag $closest."
+fi
+
+info "  ie. $tag_commit"
+
+suffix=""
+if [ "$tag_commit" != "$head" ]; then
+    if ! commits="`commits_between $tag_commit $head`"; then
+        fatal 2 "Failed to get list of commits between $tag_commit and $head"
+    fi
+    n="`echo $commits | wc -l`"
+    hd="${head%????????????????????????????????}"
+    suffix=":${n}:g$hd"
+fi
+
+version_tag="${closest#$COMPONENT/}$suffix"
+echo $version_tag
+exit 0
+

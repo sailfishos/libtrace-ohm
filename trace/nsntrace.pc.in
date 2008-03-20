@@ -1,0 +1,12 @@
+# trace library pkg-config file
+prefix=##__PREFIX__##
+libdir=##__LIBDIR__##
+includedir=##__INCDIR__##
+
+Name: log
+Description: NSN SOA trace library.
+Version: 0.0.0
+Requires:
+Conflicts:
+Libs: -L${libdir} -ltrace
+Cflags: -I${includedir}

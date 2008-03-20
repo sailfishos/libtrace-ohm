@@ -1,0 +1,24 @@
+Filters are of the form <expr1 expr2 ... exprn>. Every expression is
+of the form <tag=value> where value can be a simple string or a regexp.
+
+A trace message is passed through if it matches any of the filters. A
+message matches a filter if its associated set of tags match the filter.
+A set of tags match a filter if every expression of the filter is satisfied
+by at least one tag. In other words, a filter is the boolean AND of its
+expressions and the global filtering state/configuration is the logical OR
+of all the filters.
+
+
+trace add filter user=foo
+trace add filter from=+123456 to=+987654
+trace add filter srcaddr=10.0.0.40
+trace add filter srcaddr=10.0.0.40 srcport=5060
+
+trace test.fibonacci=+fibonacci
+trace test.prime=+loop
+trace test.test=+calls,+loop
+
+(Filters are sorted and evaluated by increasing number of expressions as
+ the fewer expressions the lighter is to evaluate a filter and the more
+ probable it is to match a message (at least in theory).)
+

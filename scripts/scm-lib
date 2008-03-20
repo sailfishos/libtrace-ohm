@@ -1,0 +1,252 @@
+#!/bin/bash
+
+FIRST_VERSION_EVER=0.2.0
+
+
+####################
+# info - print an informative message (to stderr)
+info () {
+    [ "$quiet" = "yes" ] || echo "$*" 1>&2
+}
+
+
+####################
+# warning - emit a warning message (to stderr)
+warning () {
+    echo "${0##*/}: warning: $*" 1>&2
+}
+
+
+####################
+# component - get the name of the current component
+component () {
+    local _component="${1:-`pwd`}"
+
+    [ -z "$TOP" ] && return 1
+
+    echo "${_component##${TOP}/}"
+    return 0
+}
+
+
+####################
+# buildable - check if the current directory seems to contain a buildable
+#             set of software
+buildable () {
+    local _dir="${1:-`pwd`}" _specs
+
+    [ ! -f $_dir/Makefile ] && return 1
+    [ -d $_dir/packaging ]  && return 0
+
+    # (disobedian) cubical compatibility (darn...)
+    _specs="`find $_dir -type f -name \*.spec`"
+    [ -n "$_specs" ] && return 0
+
+    return 1
+}
+
+
+####################
+# commit_of - get the git commit ID (SHA1) of an object
+commit_of () {
+    local _obj="$1" _commit
+
+    _commit="`git show $_obj | grep '^commit ' | head -1 | cut -d ' ' -f 2`"
+    if [ $? = 0 ]; then
+        echo $_commit
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+####################
+# parents_of - get the parents of a commit
+parents_of () {
+    local _obj="$1"
+
+    [ -z "$_obj" ] && return 1
+
+    git show --pretty=format:'parent: %P' $_obj | \
+        grep '^parent: ' | head -1 | cut -d ' ' -f 2
+    return 0
+}
+
+
+####################
+# commits_between - get the distance between 2 commit IDs
+commits_between () {
+    local _n _commits
+
+    [ -z "$1" -o -z "$2" ] && return 1
+    [ "$1" = "$2" ] && { echo ""; return 0; }
+
+    _commits="`git rev-list $1..$2`"
+    [ -z "$_commits" ] && return 1
+
+    echo $_commits
+    return 0
+}
+
+
+####################
+# tags_of - get the tags matching a prefix
+tags_of () {
+    local _obj="${1:-`component`}"
+
+    [ -z "$_obj" ] && return 1
+    git tag -l $_obj | egrep '*((TEST)|(RC)|(RELEASE))_*'
+}
+
+
+
+####################
+# closest_tag - get the closest (ancestor) tag matching a prefix from a commit
+closest_tag () {
+    local _prefix="$1" _commit="$2"
+    local _tags _t _c _n _min _tag _newer
+
+    [ -z "$_prefix" -o -z "$_commit" ] && return 1
+    
+    if ! _tags="`tags_of $_prefix`"; then
+	return 1
+    fi
+
+   _tag=""
+   _min=""
+   for _t in $_tags; do
+       if ! _c="`commit_of $_t`"; then
+           continue
+       fi
+       if ! _commits="`commits_between $_c $_commit`"; then
+           continue
+       fi
+       _n="`echo $_commits | wc -w`"
+       if [ -z "$_min" ] || [ "$_n" -lt "$_min" ]; then
+           _min=$_n
+           _tag=$_t
+       fi
+       # pick the larger/newer one upon equal distance
+       if [ "$_n" -eq "$_min" ]; then
+           newer_version $_t $_tag; _newer=$?
+           case $_newer in
+               1) _tag=$_t;;
+               *)
+           esac
+       fi
+   done
+   
+   [ -z "$_tag" ] && return 1
+   echo $_tag
+   return 0
+}
+
+
+####################
+# specificity - return the specificity level of a tag for a given component
+specificity () {
+    local _tag="${1%/*}" _component="${2%/}" _d _p _n _t
+
+    _n=0
+    _p=""
+    _t=""
+    for _d in ${_tag//// }; do
+        _p="$_p$_t$_d"
+        case $_component in
+            $_p*) let _n=$_n+1;;
+               *) echo 0; return 0;;
+        esac
+        _t="/"
+    done
+
+    echo $_n
+    return 0
+}
+
+
+####################
+# version_major - get the major part of a version number
+version_major () {
+    local _version="$1" _major
+
+    _major="${_version%%.*}"
+    echo $_major
+}
+
+
+####################
+# version_minor - get the minor part of a version number
+version_minor () {
+    local _version="$1" _minor
+
+    _minor="${_version#*.}"
+    _minor="${_minor%.*}"
+    echo $_minor
+}
+
+
+####################
+# version_patch - get the patch part of a version number
+version_patch () {
+    local _version="$1"
+
+    _version="${_version%%:*}"
+    case $_version in
+        *.*.*)   echo "${_version##*.}"; return 0;;
+        *.*)     echo "1"; return 0;;
+          *)     echo ""; return 1;;
+    esac
+}
+
+
+####################
+# newer_version - return 0, 1, or 2, depending whether $1 is equal, larger or
+#                 smaller than $2 (uses sort)
+newer_version () {
+    local _v1="${1#*_}" _v2="${2#*_}" _newer
+    
+    [ "$_v1" = "$_v2" ] && return 0
+
+    _newer="`echo -e "$_v1\n$_v2\n" | sort | tail -1`"
+    [ "$_newer" = "$_v1" ] && return 1 || return 2
+}
+
+
+####################
+# newer_type - return 0, 1, or 2, depending whether $1 is equal, later or
+#              older than $2
+newer_type () {
+    local _t1="$1" _t2="$2"
+
+    case "$_t1" in
+        TEST)
+            case "$_t2" in
+                TEST)    return 0;;
+                RC)      return 2;;
+                RELEASE) return 2;;
+                *) return -1;;
+            esac
+            ;;
+        RC)
+            case "$_t2" in
+                TEST)    return 1;;
+                RC)      return 0;;
+                RELEASE) return 2;;
+                *) return -1;;
+            esac
+            ;;
+        RELEASE)
+            case "$_t2" in
+                TEST)    return 1;;
+                RC)      return 1;;
+                RELEASE) return 0;;
+                *) return -1;;
+            esac
+            ;;
+    esac
+}
+
+
+
+

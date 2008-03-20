@@ -1,0 +1,160 @@
+#!/bin/bash
+
+#############################################################################
+# publish-packages:
+#
+# Usage: publish-packages [options] --repo url --file file1 file2 ... fileN
+#
+# The possible options are:
+#     --dry-run:         don't do just show what would be done
+#     --identity <path>: use identity found in <path> for authentication
+#     --pubkey-only:     use only public-key authentication
+#
+#
+# Currently this script support only pushing RPMs to a YUM repository
+# using ssh. Feel free to add support for other transport mechanisms
+# (eg. HTTP, FTP) and other repository types (eg. apt/dpkg).
+#
+
+xeq=""
+
+####################
+# fatal - emit a fatal error message and exit (to stderr)
+fatal () {
+    local _ec="$1"
+    shift
+
+    echo "${0##*/}: fatal error: $*" 1>&2
+    exit $_ec
+}
+
+
+
+# ****************************************************************************
+# *                       *** transport implementation ***
+# ****************************************************************************
+
+
+#########################
+# ssh_publish - publish a set of files to a repository using scp
+ssh_publish () {
+    local _user="$1" _host="$2" _path="$3" _files
+    
+    shift 3; _files="$*"
+
+    if [ -z "$_user" -o -z "$_host" -o -z "$_path" -o -z "$_files" ]; then
+        fatal 3 "missing options ($_user@$_host/$_path, $_files)"
+    fi
+
+    $xeq scp $SSH_OPTIONS $_files $_user@$_host:/$_path
+    return $?
+}
+
+
+# ****************************************************************************
+# *                          *** repository support ***
+# ****************************************************************************
+
+
+#########################
+# yum_init - initialize a YUM repository (currently just mkdir -p it)
+yum_init () {
+    local _user="$1" _host="$2" _path="$3"
+    
+    if [ -z "$_user" -o -z "$_host" -o -z "$_path" ]; then
+        fatal 3 "missing or invalid repository ($_user@$_host/$_path)"
+    fi
+
+    $xeq ssh $SSH_OPTIONS $_user@$_host mkdir -p /$_path
+
+    return $?
+}
+
+
+#########################
+# yum_update - update (currently recreate) the repository
+yum_update () {
+    local _user="$1" _host="$2" _path="$3"
+    
+    if [ -z "$_user" -o -z "$_host" -o -z "$_path" ]; then
+        fatal 3 "missing or invalid repository ($_user@$_host/$_path)"
+    fi
+
+    $xeq ssh $SSH_OPTIONS $_user@$_host createrepo -q /$_path
+
+    return $?
+}
+
+
+
+# ****************************************************************************
+# *                             *** main script ***
+# ****************************************************************************
+
+
+dryrun=no
+pubkey=no
+identity=""
+repository=""
+files=""
+
+# parse command line options
+while [ "${1#-}" != "$1" ]; do
+    opt="$1"; shift
+    case $opt in
+        --dry-run|-n)
+            xeq=echo
+            dryrun="yes"
+            ;;
+        --pubkey*|-p)
+            pubkey='yes'
+            ;;
+        --identity|-i)
+            identity="$1"
+            shift;;
+        --repo|-r)
+            repository="$1"
+            shift
+            ;;
+        --files|-f)
+            files="$*"
+            shift $#
+            ;;
+    esac
+done
+
+# check command line options
+if [ -z "$repository" -o -z "$files" ]; then
+    fatal 1 "missing repository ($repository) or files ($files)"
+fi
+
+# run some trivial identity file check if we need one
+if [ -n "$identity" ]; then
+    [ ! -e $identity ] &&
+        fatal 1 "missing or unreadable identity file ($identity)"
+fi
+
+# check repository syntax (currently only YUM/RPM supported over ssh)
+case $repository in
+    ssh://*@*) ;;
+    *) fatal 2 "incorrect repository syntax ($repository)";;
+esac
+
+
+# extract user, host, repository path
+repo="${repository#ssh://}"
+SSH_USER="${repo%%@*}"; repo="${repo##*@}"
+SSH_HOST="${repo%%/*}"; repo="${repo#*/}"
+SSH_PATH="$repo"
+
+# massage extra ssh options together (identity file, pubkey-only auth)
+SSH_OPTIONS=''
+[ -n "$identity" ] && SSH_OPTIONS="$SSH_OPTIONS -i $identity"
+[ "$pubkey" = "yes" ] && \
+    SSH_OPTIONS="$SSH_OPTIONS -o PreferredAuthentications=publickey"
+
+# create repo, pu(bli)sh files, update repo metadata
+yum_init $SSH_USER $SSH_HOST $SSH_PATH && \
+ssh_publish $SSH_USER $SSH_HOST $SSH_PATH $files && \
+yum_update $SSH_USER $SSH_HOST $SSH_PATH
+
