@@ -3,8 +3,8 @@ prefix=##__PREFIX__##
 libdir=##__LIBDIR__##
 includedir=##__INCDIR__##
 
-Name: log
-Description: NSN SOA trace library.
+Name: trace
+Description: A simple trace library.
 Version: 0.0.0
 Requires:
 Conflicts:
