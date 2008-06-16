@@ -45,6 +45,5 @@ AC_CHECK_FUNCS([gettimeofday memset regcomp strdup])
 AC_CONFIG_FILES([Makefile
                 src/Makefile
                 src/libtrace.pc
-                include/Makefile
-		tests/Makefile])
+                include/Makefile])
 AC_OUTPUT
