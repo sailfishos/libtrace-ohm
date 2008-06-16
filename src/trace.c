@@ -9,11 +9,18 @@
 #include <trace/list.h>
 #include <trace/trace.h>
 
+#undef __TRACE_FORCE_NEWLINE__       /* don't force a \n after the header */
 
 #define UTC_STRFTIME    "%Y-%m-%d %H:%M:%S"
 #define UTC_STRFLEN     (4+1+2+1+2+1+2+1+2+1+2)       /* see above */
 #define UTC_MSECLEN     (1+3)                         /* ".xyz" */
 #define UTC_MIN_BUFSIZE (UTC_STRFLEN+UTC_MSECLEN+1)
+
+#define CHECK_DEFAULT_CONTEXT(tc) do {			\
+		if ((tc) == TRACE_DEFAULT_CONTEXT)		\
+			(tc) = default_context();			\
+	} while (0)
+
 
 /*
  * private filtering flags
@@ -26,12 +33,15 @@ enum {
 };
 
 
-
 #define __E(fmt, args...) do {											\
 		fprintf(stderr, "### => %s [%u] "fmt" ###\n",					\
 				__FUNCTION__, getpid(), ## args);						\
 		fflush(stderr);													\
 	} while (0)
+
+
+static trace_context_t __dc;
+
 
 static int alloc_flags(trace_context_t *tc, trace_component_t *c);
 static int free_flags (trace_context_t *tc, trace_component_t *c);
@@ -47,7 +57,12 @@ static int format_header(trace_context_t *tc, char *buf, size_t size,
 						 int flag, trace_tag_t *tags);
 static int check_header(const char *format);
 
-static LIST_HOOK(contexts);
+static void                    default_init(void);
+static inline trace_context_t *default_context(void);
+
+
+static LIST_HOOK(contexts);                 /* open trace contexts */
+static initialized = 0;
 
 
 /*****************************************************************************
@@ -61,7 +76,11 @@ static LIST_HOOK(contexts);
 int
 trace_init(void)
 {
-	list_hook_init(&contexts);
+	if (!initialized) {
+		list_hook_init(&contexts);
+		initialized = 1;
+	}
+	
 	return 0;
 }
 
@@ -79,6 +98,13 @@ trace_exit(void)
 		tc = list_entry(p, trace_context_t, hook);
 		trace_close(tc);
 	}
+
+	if (__dc.name) {
+		free(__dc.name);
+		__dc.name = NULL;
+	}
+
+	initialized = 0;
 }
 
 
@@ -117,6 +143,9 @@ trace_close(trace_context_t *tc)
 	trace_component_t     *comp;
 	trace_simple_filter_t *sf;
 	trace_regexp_filter_t *rf;
+
+	if (tc == &__dc)
+		return;
 
 	list_delete(&tc->hook);
 	
@@ -170,12 +199,16 @@ trace_find_context(const char *name)
 	trace_context_t *tc;
 	list_hook_t     *p;
 
+	if (__dc.name && (!name || !name[0] || !strcmp(name, "default")))
+		return &__dc;
+	
 	list_iter_forw(p, &contexts) {
 		tc = list_entry(p, trace_context_t, hook);
 		if (!strcmp(tc->name, name))
 			return tc;
 	}
 
+	
 	return NULL;
 }
 
@@ -194,6 +227,8 @@ trace_set_destination(trace_context_t *tc, const char *to)
 	FILE *dfp, *old;
 	int   status;
 
+	CHECK_DEFAULT_CONTEXT(tc);
+	
 	status = 0;
 	old    = tc->destination;
 	
@@ -223,10 +258,12 @@ int
 trace_set_header(trace_context_t *tc, const char *header)
 {
 	const char *old;
-	
+
 	if (check_header(header))                 /* XXX implement me */
 		return EINVAL;
-	
+
+	CHECK_DEFAULT_CONTEXT(tc);
+		
 	old = tc->header;
 	tc->header = strdup(header);
 	
@@ -253,6 +290,8 @@ trace_add_component(trace_context_t *tc, trace_component_t *c)
 	trace_component_t **map;
 	trace_flag_t       *f;
 	int                 err;
+
+	CHECK_DEFAULT_CONTEXT(tc);
 
 	/*
 	 * allocate trace flag values, active flag bitmask
@@ -302,6 +341,8 @@ trace_del_component(trace_context_t *tc, const char *name)
 	trace_component_t *c;
 	list_hook_t       *p;
 
+	CHECK_DEFAULT_CONTEXT(tc);
+
 	c = NULL;
 	list_iter_forw(p, &tc->components) {
 		c = list_entry(p, trace_component_t, hook);
@@ -314,122 +355,6 @@ trace_del_component(trace_context_t *tc, const char *name)
 	
 	return ENOENT;
 }
-
-
-/********************
- * trace_list_flags
- ********************/
-int
-trace_list_flags(trace_context_t *tc, char *buf, size_t size,
-				 char *format, char *separator)
-{
-#define OVERFLOW_CHECK(r, s) do { if ((r) >= (s)) goto overflow; } while (0)
-#define NONE "<none>"
-
-	trace_component_t *c;
-	trace_flag_t      *f;
-	list_hook_t       *p;
-	const char        *s;
-	char              *d, *item, *sep;
-	int                left, n, nl, sep_len;
-
-	d    = buf;
-	left = size;
-
-	if (format == NULL)
-		format = TRACE_FLAG_FORMAT;
-	if (separator == NULL)
-		separator = TRACE_FLAG_SEPARATOR;
-	sep_len = strlen(separator);
-
-	/*
-	 * generate a list of flags according to format
-	 */
-
-	if (list_is_empty(&tc->components)) {
-		s = format;
-		/* try to indent '<none>' according to format */
-		while ((*s == ' ' || *s == '\t') && left > 0) {
-			*d++ = *s++;
-			left--;
-		}
-		if (left < sizeof(NONE))
-			goto overflow;
-		for (; *s; s++)
-			nl = (*s == '\n');
-		
-		strcpy(d, NONE);
-		d    += sizeof(NONE) - 1;
-		left -= sizeof(NONE) - 1;
-		
-		if (left > 1) {
-			*d = '\0';
-			return (int)(d - buf);
-		}
-		else {                                   /* try to protect fools... */
-			if (d > buf)
-				d[-1] = '\0';
-			else
-				*buf = '\0';
-			return -EOVERFLOW;
-		}
-	}
-	else {
-		sep = "";
-		list_iter_forw(p, &tc->components) {
-			c = list_entry(p, trace_component_t, hook);
-			for (f = c->flags; f->name != NULL; f++) {
-				s = format;
-				if (*sep) {
-					OVERFLOW_CHECK(sep_len, left);
-					strcpy(d, sep);
-					d    += sep_len;
-					left -= sep_len;
-				}
-				while (*s && left > 0) {
-
-					if (*s != '%') {
-						*d++ = *s++;
-						left--;
-						continue;
-					}
-
-					s++;
-					switch (*s) {
-					case 'c': item = c->name; goto emit;
-					case 'f': item = f->name; goto emit;
-					case 'd': item = f->description;
-					emit:
-						n = snprintf(d, left, "%s", item);
-						OVERFLOW_CHECK(n, left);
-						d    += n;
-						left -= n;
-						s++;
-						break;
-					default:
-						*d++ = *s++;
-						left--;
-					}
-				}
-				sep = separator;
-			}
-		}
-	}
-	
-	if (left < 1)
-		goto overflow;
-			
-	*d = '\0';
-	return (d - buf);
-	
- overflow:
-	if (d > buf)
-		d[-1] = '\0';
-	else
-		*buf = '\0';
-	return -EOVERFLOW;
-}
-
 
 
 /*****************************************************************************
@@ -498,6 +423,10 @@ tst_bit(trace_bits_t *tb, int n)
 }
 
 
+/*****************************************************************************
+ *                      *** flag manipulation/listing ***                    *
+ *****************************************************************************/
+
 
 /********************
  * trace_enable
@@ -505,9 +434,13 @@ tst_bit(trace_bits_t *tb, int n)
 int
 trace_enable(trace_context_t *tc)
 {
-	int old = tc->enabled;
+	int old;
 
+	CHECK_DEFAULT_CONTEXT(tc);
+
+	old = tc->enabled;
 	tc->enabled = 1;
+
 	return old;
 }
 
@@ -518,9 +451,13 @@ trace_enable(trace_context_t *tc)
 int
 trace_disable(trace_context_t *tc)
 {
-	int old = tc->enabled;
-	
+	int old;
+
+	CHECK_DEFAULT_CONTEXT(tc);
+
+	old = tc->enabled;
 	tc->enabled = 0;
+	
 	return old;
 }
 
@@ -531,6 +468,8 @@ trace_disable(trace_context_t *tc)
 int
 trace_on(trace_context_t *tc, int flag)
 {
+	CHECK_DEFAULT_CONTEXT(tc);
+	
 	if (!tst_bit(&tc->bits, flag))
 		return EINVAL;
 
@@ -545,11 +484,172 @@ trace_on(trace_context_t *tc, int flag)
 int
 trace_off(trace_context_t *tc, int flag)
 {
+	CHECK_DEFAULT_CONTEXT(tc);
+
 	if (!tst_bit(&tc->bits, flag))
 		return EINVAL;
 	
 	clr_bit(&tc->mask, flag);
 	return 0;
+}
+
+
+/********************
+ * trace_list_flags
+ ********************/
+int
+trace_list_flags(trace_context_t *tc, char *buf, size_t size,
+				 char *format, char *separator)
+{
+#define OVERFLOW_CHECK(r, s) do { if ((r) >= (s)) goto overflow; } while (0)
+#define NONE "<none>"
+
+	trace_component_t *c;
+	trace_flag_t      *f;
+	list_hook_t       *p;
+	const char        *s;
+	char              *d, *item, *sep, *end, *fmt;
+	char               fmtstr[64], itembuf[128];
+	int                left, n, nl, sep_len, minw, maxw, justify;
+
+	CHECK_DEFAULT_CONTEXT(tc);
+
+	d    = buf;
+	left = size;
+	*d   = '\0';
+
+	if (format == NULL)
+		format = TRACE_FLAG_FORMAT;
+	if (separator == NULL)
+		separator = TRACE_FLAG_SEPARATOR;
+	sep_len = strlen(separator);
+
+	/*
+	 * generate a list of flags according to format
+	 */
+
+	if (list_is_empty(&tc->components)) {
+		s = format;
+		/* try to indent '<none>' according to format */
+		while ((*s == ' ' || *s == '\t') && left > 0) {
+			*d++ = *s++;
+			left--;
+		}
+		if (left < sizeof(NONE))
+			goto overflow;
+		for (; *s; s++)
+			nl = (*s == '\n');
+		
+		strcpy(d, NONE);
+		d    += sizeof(NONE) - 1;
+		left -= sizeof(NONE) - 1;
+		
+		if (left > 1) {
+			*d = '\0';
+			return (int)(d - buf);
+		}
+		else {                                   /* try to protect fools... */
+			if (d > buf)
+				d[-1] = '\0';
+			else
+				*buf = '\0';
+			return -EOVERFLOW;
+		}
+	}
+	else {
+		sep = "";
+		list_iter_forw(p, &tc->components) {
+			c = list_entry(p, trace_component_t, hook);
+			for (f = c->flags; f->name != NULL; f++) {
+				s = format;
+				if (*sep) {
+					OVERFLOW_CHECK(sep_len, left);
+					strcpy(d, sep);
+					d    += sep_len;
+					left -= sep_len;
+				}
+				while (*s && left > 0) {
+
+					if (*s != '%') {
+						*d++ = *s++;
+						left--;
+						continue;
+					}
+					
+					s++;
+					
+					if (*s == '-') {
+						justify = -1;
+						s++;
+					}
+					else
+						justify = +1;
+					
+					minw = maxw = 0;
+					if ('0' <= *s && *s <= '9') {
+						minw = (int)strtol(s, &end, 10);
+						if (end == NULL)
+							goto formaterr;
+						if (*end == '.') {
+							s = end + 1;
+							maxw = (int)strtol(s, &end, 10);
+							if (end == NULL)
+								goto formaterr;
+						}
+						s = end;
+					}
+
+					switch (*s) {
+					case 'c': item = c->name;        goto emit;
+					case 'f': item = f->name;        goto emit;
+					case 'd': item = f->description; goto emit;
+					case 'F':
+						sprintf(item = itembuf, "%s.%s", c->name, f->name);
+						                             goto emit;
+					case 's': item = tst_bit(&tc->mask, f->bit) ? "on" : "off";
+					emit:
+						fmt = fmtstr;
+						*fmt++ = '%';
+						if (justify < 0)
+							*fmt++ = '-';
+						if (minw > 0)
+							fmt += sprintf(fmt, "%d", minw);
+						if (maxw > 0)
+							fmt += sprintf(fmt, ".%d", maxw);
+						*fmt++ = 's';
+						*fmt   = '\0';
+						n = snprintf(d, left, fmtstr, item);
+						OVERFLOW_CHECK(n, left);
+						d    += n;
+						left -= n;
+						s++;
+						break;
+					default:
+						*d++ = *s++;
+						left--;
+					}
+				}
+				sep = separator;
+			}
+		}
+	}
+	
+	if (left < 1)
+		goto overflow;
+			
+	*d = '\0';
+	return (d - buf);
+	
+ overflow:
+	if (d > buf)
+		d[-1] = '\0';
+	else
+		*buf = '\0';
+	return -EOVERFLOW;
+
+ formaterr:
+	*buf = '\0';
+	return -EINVAL;
 }
 
 
@@ -590,6 +690,8 @@ __trace_write(trace_context_t *tc,
 	va_list ap;
 	char    header[1024];
 
+	CHECK_DEFAULT_CONTEXT(tc);
+
 	if (suppress_message(tc, flag, tags))
 		return;
 
@@ -614,6 +716,8 @@ __trace_writel(trace_context_t *tc,
 {
 	char header[1024];
 
+	CHECK_DEFAULT_CONTEXT(tc);
+	
 	if (suppress_message(tc, flag, tags))
 		return;
 	
@@ -809,8 +913,13 @@ format_header(trace_context_t *tc, char *buf, size_t size,
 	
 	if (left < 2)
 		goto overflow;
+#ifdef __TRACE_FORCE_NEWLINE__
 	if (d > buf && d[-1] != '\n')
 		*d++ = '\n';
+#else
+	if (d > buf && d[-1] != ' ' && d[-1] != '\t')
+		*d++ = ' ';
+#endif
 	*d = '\0';
 
 	tc->last = now;
@@ -1113,6 +1222,8 @@ trace_reset_filters(trace_context_t *tc)
 	trace_simple_filter_t *sf;
 	trace_regexp_filter_t *rf;
 
+	CHECK_DEFAULT_CONTEXT(tc);
+
 	list_iter_forw_safe(p, n, &tc->simple_filters) {
 		sf = list_entry(p, trace_simple_filter_t, hook);
 		list_delete(&sf->hook);
@@ -1138,6 +1249,8 @@ trace_add_simple_filter(trace_context_t *tc, char *filter_descr)
 	trace_simple_filter_t *filter;
 	trace_tag_t           *tags, *t;
 	int                    n, status;
+
+	CHECK_DEFAULT_CONTEXT(tc);
 
 	if (filter_descr == TRACE_NO_TAGS ||
 		!strcmp(filter_descr, TRACE_FILTER_NO_TAGS)) {
@@ -1186,6 +1299,8 @@ trace_del_simple_filter(trace_context_t *tc, char *filter_descr)
 	trace_tag_t           *tags, *t;
 	list_hook_t           *p, *n;
 	int                    ntag, status;
+
+	CHECK_DEFAULT_CONTEXT(tc);
 
 	if (filter_descr == TRACE_NO_TAGS ||
 		!strcmp(filter_descr, TRACE_FILTER_NO_TAGS)) {
@@ -1249,6 +1364,8 @@ trace_add_regexp_filter(trace_context_t *tc, char *filter_descr)
 	trace_regexp_filter_t *filter;
 	trace_tag_t           *tags, *t;
 	int                    n, status;
+
+	CHECK_DEFAULT_CONTEXT(tc);
 
 	if (filter_descr == TRACE_NO_TAGS ||
 		!strcmp(filter_descr, TRACE_FILTER_NO_TAGS)) {
@@ -1314,6 +1431,8 @@ trace_del_regexp_filter(trace_context_t *tc, char *filter_descr)
 	trace_tag_t           *tags, *t;
 	list_hook_t           *p, *n;
 	int                    ntag, status;
+
+	CHECK_DEFAULT_CONTEXT(tc);
 
 	if (filter_descr == TRACE_NO_TAGS ||
 		!strcmp(filter_descr, TRACE_FILTER_NO_TAGS)) {
@@ -1412,13 +1531,73 @@ trace_print_tags(trace_tag_t *tags, char *buf, size_t size)
 	return "<buffer too small>";
 }
 
+
 /********************
  * check_header
  ********************/
 static int
 check_header(const char *format)
 {
+	static int warn = 1;
+
+	if (warn) {
+		printf("***** %s@%s:%d: implement me, please... *****\n", __FUNCTION__,
+			   __FILE__, __LINE__);
+		warn = 0;
+	}
+	
 	return format ? 0 : EINVAL; /* XXX TODO: decent format checking */
+}
+
+
+/*****************************************************************************
+ *                       *** default context handling ***                    *
+ *****************************************************************************/
+
+/********************
+ * default_init
+ ********************/
+static void
+default_init(void)
+{
+	char link_path[32], bin_path[256], *bin_name;
+			
+	if (__dc.name != NULL)
+		return;
+
+	/* determine application name, defaulting to unknown */
+	memset(bin_path, 0, sizeof(bin_path));
+	sprintf(link_path, "/proc/%d/exe", getpid());
+	readlink(link_path, bin_path, sizeof(bin_path) - 1);
+	if (bin_path[0]) {
+		if ((bin_name = strrchr(bin_path, '/')) == NULL)
+			bin_name = bin_path;
+		else
+			bin_name++;
+	}
+	else
+		bin_name = "unknown";
+	
+	trace_open(&__dc, bin_name);
+
+	/* make purely flag-based, enable, and set a very simple header */
+	trace_add_simple_filter(&__dc, TRACE_FILTER_ALL_TAGS);
+	trace_enable(&__dc);
+	trace_set_header(&__dc, "[%C]");
+
+}
+
+
+/********************
+ * default_context
+ ********************/
+static inline trace_context_t *
+default_context(void)
+{
+	if (unlikely(__dc.name == NULL))
+		default_init();
+	
+	return &__dc;
 }
 
 

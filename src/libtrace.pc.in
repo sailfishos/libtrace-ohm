@@ -1,7 +1,8 @@
 # trace library pkg-config file
-prefix=##__PREFIX__##
-libdir=##__LIBDIR__##
-includedir=##__INCDIR__##
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
 
 Name: trace
 Description: A simple trace library.

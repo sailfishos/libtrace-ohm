@@ -1,5 +1,5 @@
-#ifndef TRACE_TRACE_H_INCLUDED
-#define TRACE_TRACE_H_INCLUDED
+#ifndef __TRACE_H__
+#define __TRACE_H__
 
 #include <stdio.h>
 #include <errno.h>
@@ -70,8 +70,13 @@ typedef struct trace_component {
 		.flags = (f)				  \
 	}
 
-#define TRACE_DECLARE_COMPONENT(c, n, f) \
-	trace_component_t c = TRACE_COMPONENT_INIT(n, f)
+
+#define TRACE_DECLARE_COMPONENT(c, n, ...)		\
+	trace_flag_t __trace_flags_##c[] = {		\
+		__VA_ARGS__,							\
+		TRACE_FLAG_LAST							\
+	};											\
+	trace_component_t c = TRACE_COMPONENT_INIT(n, __trace_flags_##c)
 
 
 typedef struct trace_bits {
@@ -111,6 +116,8 @@ typedef struct trace_context {
 #define TRACE_HEADER_FORMAT "=====\n%D %i:\nlocation: %W\nkeywords: %T\n-----"
 #define TRACE_FLAG_FORMAT    "  %c.%f:\t%d"   /* default listing format */
 #define TRACE_FLAG_SEPARATOR "\n"             /* and separator */
+
+#define TRACE_DEFAULT_CONTEXT NULL            /* default trace context */
 
 
 
@@ -323,28 +330,23 @@ int  trace_on(trace_context_t *, int);
 void __trace_write(trace_context_t *tc,
 				   const char *file, int line, const char *function,
 				   int flag, trace_tags_t *tags, char *format, ...);
-void
-__trace_writel(trace_context_t *tc,
-			   const char *file, int line, const char *function,
-			   int flag, trace_tags_t *tags, char *format, va_list ap);
+void __trace_writel(trace_context_t *tc,
+					const char *file, int line, const char *function,
+					int flag, trace_tags_t *tags, char *format, va_list ap);
 
-
-#define STRINGIFY(x) #x
 
 #define trace_write(c, f, tags, format, args...) do {					\
-		if ((c)->enabled)												\
+		if (!(c) || (c)->enabled)										\
 			__trace_write(c, __FILE__, __LINE__, __FUNCTION__,			\
 						  f, tags, format, ## args);					\
 	} while (0)
 
 
 void trace_reset_filters(trace_context_t *tc);
-int trace_add_simple_filter(trace_context_t *tc, char *);
-int trace_del_simple_filter(trace_context_t *tc, char *);
-int trace_add_regexp_filter(trace_context_t *tc, char *);
-int trace_del_regexp_filter(trace_context_t *tc, char *);
-
-int trace_add_regexp_filter(trace_context_t *tc, char *);
+int  trace_add_simple_filter(trace_context_t *tc, char *);
+int  trace_del_simple_filter(trace_context_t *tc, char *);
+int  trace_add_regexp_filter(trace_context_t *tc, char *);
+int  trace_del_regexp_filter(trace_context_t *tc, char *);
 
 char *trace_print_tags(trace_tag_t *tags, char *buf, size_t size);
 
@@ -377,7 +379,7 @@ char *regexp_print(trace_regexp_filter_t *filter, char *buf, size_t size);
 
 
 
-#endif /* TRACE_TRACE_H_INCLUDED */
+#endif /* __TRACE_H__ */
 
 
 

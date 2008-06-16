@@ -64,7 +64,8 @@ trace_parse_flags(char *command)
 		comp = ctx;
 		p = ctxname;
 		while (*comp &&
-			   *comp != ' ' && *comp != '\t' && *comp != TRACE_COMPSEP &&
+			   *comp != ' ' && *comp != '\t' &&
+			   *comp != TRACE_COMPSEP && *comp != TRACE_MODSEP &&
 			   (unsigned long)p - (unsigned long)ctxname < TRACE_MAXNAME)
 			*p++ = *comp++;
 		
@@ -74,14 +75,19 @@ trace_parse_flags(char *command)
 			break;
 		}
 
-		if (*comp != TRACE_COMPSEP) {
+		if (*comp == TRACE_MODSEP) {     /* default context */
+			ctxname[0] = '\0';
+			comp       = ctx;
+		}
+		else if (*comp != TRACE_COMPSEP) {
 			ERR_MSG("missing component name separator (%c)", TRACE_COMPSEP);
 			retval = -EINVAL;
 			break;
 		}
-		
-		*p = '\0';
-		comp++;
+		else {
+			*p = '\0';
+			comp++;
+		}
 
 		
 		/*
@@ -116,7 +122,8 @@ trace_parse_flags(char *command)
 		 */
 		
 		if ((tc = trace_find_context(ctxname)) == NULL) {
-			ERR_MSG("cannot find context \"%s\"", ctxname);
+			ERR_MSG("cannot find context \"%s\"",
+					ctxname[0] ? ctxname : "default");
 			retval = -ESRCH;
 			break;
 		}

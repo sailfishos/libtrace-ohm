@@ -1,5 +1,5 @@
-#ifndef __LIST_HOOK_H__
-#define __LIST_HOOK_H__
+#ifndef __TRACE_LIST_HOOK_H__
+#define __TRACE_LIST_HOOK_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,6 +10,8 @@ extern "C" {
  * doubly linked lists, obviously inspired by the linux kernel implementation
  */
 
+
+#define LIST_HOOK_INIT(hook) { &(hook), &(hook) }
 #define LIST_HOOK(name) list_hook_t name = { &(name), &(name) }
 
 typedef struct list_hook list_hook_t;
@@ -153,7 +155,7 @@ list_delete(list_hook_t *e)
 #endif
 
 
-#endif /* __LIST_HOOK_H__ */
+#endif /* __TRACE_LIST_HOOK_H__ */
 
 
 /*
