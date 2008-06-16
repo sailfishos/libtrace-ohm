@@ -1,0 +1,23 @@
+Source: libtrace
+Section: libs
+Priority: optional
+Maintainer: Krisztian Litkey <krisztian.litkey@nokia.com>
+Standards-Version: 0.0.1
+Build-Depends: cdbs, debhelper (>= 4.1.0)
+
+Package: libtrace
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: A simple tracing library.
+ A simple tracing library.
+ .
+
+Package: libtrace-dev
+Architecture: any
+Section: libdevel
+Description: Development files for libtrace.
+ .
+ Header and pkg-config files for libtrace.
+
+
+
