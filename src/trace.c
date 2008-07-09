@@ -63,7 +63,7 @@ static inline trace_context_t *default_context(void);
 
 
 static LIST_HOOK(contexts);                 /* open trace contexts */
-static initialized = 0;
+static int initialized = 0;
 
 
 /*****************************************************************************
