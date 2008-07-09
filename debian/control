@@ -5,8 +5,9 @@ Maintainer: Krisztian Litkey <krisztian.litkey@nokia.com>
 Standards-Version: 3.6.1
 Build-Depends: cdbs, debhelper (>= 4.1.0)
 
-Package: libtrace
+Package: libtrace0
 Architecture: any
+Section: libs
 Depends: ${shlibs:Depends}
 Description: A simple tracing library.
  A simple tracing library.
@@ -15,6 +16,9 @@ Description: A simple tracing library.
 Package: libtrace-dev
 Architecture: any
 Section: libdevel
+Depends: libtrace0
+Conflicts: libtrace0-dev
+Provides: libtrace0-dev
 Description: Development files for libtrace.
  .
  Header and pkg-config files for libtrace.

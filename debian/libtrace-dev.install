@@ -1,3 +1,4 @@
-debian/tmp/usr/include/trace/*.h /usr/include/trace
-debian/tmp/usr/lib/libtrace*.la /usr/lib
-debian/tmp/usr/lib/pkgconfig/libtrace.pc /usr/lib/pkgconfig
+usr/lib/libtrace.so
+usr/include/trace
+usr/lib/libtrace*.la
+usr/lib/pkgconfig/libtrace.pc
