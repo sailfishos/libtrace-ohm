@@ -12,9 +12,15 @@ Source0: %{name}-%{version}.tar.gz
 BuildArch: ##__ARCH__##
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
+%package devel
+Summary: Files necessary for developing software using the trace library.
+Group: Development/Libraries
+
 %description
 A simple tracing library with keyword filtering support.
 
+%description devel
+Header files, pkg-config files, etc. for the trace library.
 
 %prep
 %setup -q -n ##__TARDIR__##
@@ -27,16 +33,20 @@ export CFLAGS="-O0 -g3"
 [ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
 make DESTDIR=$RPM_BUILD_ROOT install
     
-
 %clean
 [ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
 
 
 %files
 %defattr(-,root,root,-)
-%{_includedir}/*
-%{_libdir}/*
+%{_libdir}/libtrace*.so
+%{_libdir}/libtrace*.so.*
 #%{_datadir}/%{name}
+
+%files devel
+%defattr(-,root,root,-)
+%{_includedir}/trace
+%{_libdir}/pkgconfig/libtrace*
 
 %changelog
 * Wed Apr 24 2008 Krisztian Litkey <krisztian.litkey@nokia.com> - 
