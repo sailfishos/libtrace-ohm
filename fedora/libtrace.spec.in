@@ -2,7 +2,7 @@
 %define _unpackaged_files_terminate_build 0
 
 Summary: A simple tracing library with keyword filtering support.
-Name: trace
+Name: libtrace
 Version: ##__VERSION__##
 Release: 1
 License: Proprietary
@@ -41,7 +41,6 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %defattr(-,root,root,-)
 %{_libdir}/libtrace*.so
 %{_libdir}/libtrace*.so.*
-#%{_datadir}/%{name}
 
 %files devel
 %defattr(-,root,root,-)

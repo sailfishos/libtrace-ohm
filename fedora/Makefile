@@ -1,4 +1,4 @@
-PACKAGE := trace
+PACKAGE := libtrace
 VERSION := 0.1
 
 TOPDIR  := $(shell while [ ! -d fedora -a "`pwd`" != "/" ]; do cd ..; done; \
