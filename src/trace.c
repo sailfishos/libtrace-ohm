@@ -642,10 +642,16 @@ trace_list_flags(trace_context_t *tc, char *buf, size_t size,
 	return (d - buf);
 	
  overflow:
-	if (d > buf)
-		d[-1] = '\0';
-	else
-		*buf = '\0';
+	if (d > buf + 4 && size > 3) {
+		d[-4] = d[-3] = d[-2] = '.';
+		d[-1]  = '\0';
+	}
+	else { 
+		if (d > buf)
+			d[-1] = '\0';
+		else
+			*buf = '\0';
+	}
 	return -EOVERFLOW;
 
  formaterr:
