@@ -1,3 +1,10 @@
+libtrace (0.0.2) unstable; urgency=low
+
+  * End flag listing with ... in case we run out of buffer space.
+  * Added support for default trace context.
+
+ -- K. Litkey <krisztian.litkey@nokia.com>  Wed, 19 Nov 2008 15:24:00 +0200
+
 libtrace (0.0.1) unstable; urgency=low
 
   * initial release.
