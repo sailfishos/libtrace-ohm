@@ -9,7 +9,7 @@ Package: libtrace0
 Architecture: any
 Section: libs
 Depends: ${shlibs:Depends}
-XB-GIT-ID: 51d848303cf2504c5ebafa467ce44e88920d4664
+XB-GIT-ID: 36bdad8a0055b1bc755beecb76e8ee0f92cce992
 Description: A simple tracing library.
  A simple tracing library.
  .
@@ -20,7 +20,7 @@ Section: libdevel
 Depends: libtrace0
 Conflicts: libtrace0-dev
 Provides: libtrace0-dev
-XB-GIT-ID: 51d848303cf2504c5ebafa467ce44e88920d4664
+XB-GIT-ID: 36bdad8a0055b1bc755beecb76e8ee0f92cce992
 Description: Development files for libtrace.
  .
  Header and pkg-config files for libtrace.

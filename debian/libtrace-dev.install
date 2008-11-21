@@ -1,4 +1,3 @@
 usr/lib/libtrace.so
 usr/include/trace
-usr/lib/libtrace*.la
 usr/lib/pkgconfig/libtrace.pc
