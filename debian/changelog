@@ -1,3 +1,10 @@
+libtrace (0.0.3) unstable; urgency=low
+
+  * Don't install *.la files.
+  * Bumped version number.
+
+ -- K. Litkey <krisztian.litkey@nokia.com>  Thu, 27 Nov 2008 14:40:46 +0200
+
 libtrace (0.0.2) unstable; urgency=low
 
   * End flag listing with ... in case we run out of buffer space.
