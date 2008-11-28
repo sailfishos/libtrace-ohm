@@ -1,3 +1,9 @@
+libtrace (0.0.2+nmu1) unstable; urgency=low
+
+  * 
+
+ -- Ismo Puustinen <ismo.h.puustinen@nokia.com>  Fri, 28 Nov 2008 12:24:09 +0200
+
 libtrace (0.0.2) unstable; urgency=low
 
   * End flag listing with ... in case we run out of buffer space.
