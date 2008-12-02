@@ -25,5 +25,12 @@ Description: Development files for libtrace.
  .
  Header and pkg-config files for libtrace.
 
+Package: libtrace-doc
+Architecture: all
+Section: doc
+XB-GIT-ID: __GIT_ID__
+Description: Documentation for libtrace.
+ .
+ Documentation for libtrace (other than the manual pages).
 
 
