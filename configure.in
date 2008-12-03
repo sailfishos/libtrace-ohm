@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT(trace, 0.1)
+AC_INIT(libtrace, 0.1)
 AC_CONFIG_SRCDIR([src/trace.c])
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
 AC_CONFIG_HEADER([include/trace/config.h])
@@ -45,5 +45,7 @@ AC_CHECK_FUNCS([gettimeofday memset regcomp strdup])
 AC_CONFIG_FILES([Makefile
                 src/Makefile
                 src/libtrace.pc
-                include/Makefile])
+                include/Makefile
+                doc/Makefile
+		rewrite/Makefile])
 AC_OUTPUT

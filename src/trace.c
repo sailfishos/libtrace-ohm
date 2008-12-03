@@ -798,7 +798,7 @@ format_header(trace_context_t *tc, char *buf, size_t size,
 	s = tc->header;
 	d = buf;
 	left = size - 1;
-
+	
 	current_utc_time(utc);
 	gettimeofday(&now, NULL);
 	

@@ -1,6 +1,7 @@
 #ifndef __SIMPLE_TRACE_H__
 #define __SIMPLE_TRACE_H__
 
+#include <sys/time.h>
 
 #if !defined(likely) || !defined(unlikely)
 #  undef likely
@@ -94,6 +95,7 @@ typedef struct {
     trace_module_t *modules;                 /* actual modules */
     int             nmodule;                 /* number of modules */
     int             id;                      /* context id */
+    struct timeval  prev;                    /* timestamp of last message */
 } trace_context_t;
 
 
@@ -105,6 +107,8 @@ typedef struct {
 #define TRACE_TO_STDOUT     ((char *)0x1)
 #define TRACE_TO_FILE(path) (path)
 
+#define trace_write(id, format, args...)        \
+    __trace_write(id, __FILE__, __LINE__, __FUNCTION__, format"\n", ## args)
 
 
 
@@ -117,6 +121,11 @@ void trace_exit(void);
 
 int  trace_context_add(const char *name);
 int  trace_context_del(int cid);
+int  trace_context_header(int cid, const char *header);
+int  trace_context_target(int cid, const char *target);
+int  trace_context_enable(int cid);
+int  trace_context_disable(int cid);
+
 
 int  trace_module_add(int cid, trace_module_t *module);
 int  trace_module_del(int cid, const char *name);
@@ -125,8 +134,8 @@ int  trace_flag_set(int id);
 int  trace_flag_clr(int id);
 int  trace_flag_tst(int id);
 
-void trace_write(int id, const char *format, ...);
-
+void __trace_write(int id, const char *file, int line, const char *func,
+                   const char *format, ...);
 
 
 #if 0

@@ -16,11 +16,18 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 Summary: Files necessary for developing software using the trace library.
 Group: Development/Libraries
 
+%package doc
+Summary: Documentation on using the trace library.
+Group: Documentation
+
 %description
 A simple tracing library with keyword filtering support.
 
 %description devel
 Header files, pkg-config files, etc. for the trace library.
+
+%description doc
+Documentation (manual pages, etc.) for the trace library.
 
 %prep
 %setup -q -n ##__TARDIR__##
@@ -46,6 +53,11 @@ make DESTDIR=$RPM_BUILD_ROOT install
 %defattr(-,root,root,-)
 %{_includedir}/trace
 %{_libdir}/pkgconfig/libtrace*
+
+%files doc
+%defattr(-,root,root,-)
+%{_mandir}/man*/libtrace.*
+%{_docdir}/*
 
 %changelog
 * Wed Apr 24 2008 Krisztian Litkey <krisztian.litkey@nokia.com> - 

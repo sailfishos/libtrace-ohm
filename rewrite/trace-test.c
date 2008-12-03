@@ -77,11 +77,13 @@ int main(int argc, char *argv[])
             FLIP(ACTION, 3);
             FLIP(VM, 4);
             
-            trace_write(DBG_GRAPH  , "DBG_GRAPH\n");
-            trace_write(DBG_VAR    , "DBG_VAR\n");
-            trace_write(DBG_RESOLVE, "DBG_RESOLVE\n");
-            trace_write(DBG_ACTION , "DBG_ACTION\n");
-            trace_write(DBG_VM     , "DBG_VM\n");
+            if (n > 0)
+                usleep((i & 0x3) * 333333);
+            trace_write(DBG_GRAPH  , "DBG_GRAPH");
+            trace_write(DBG_VAR    , "DBG_VAR");
+            trace_write(DBG_RESOLVE, "DBG_RESOLVE");
+            trace_write(DBG_ACTION , "DBG_ACTION");
+            trace_write(DBG_VM     , "DBG_VM");
         }
     }
 

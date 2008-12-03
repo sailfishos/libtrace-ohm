@@ -1,4 +1,4 @@
-SUBDIRS        = src include #tests
+SUBDIRS        = src include doc # rewrite
 
 pkgconfigdir   = ${libdir}/pkgconfig
 pkgconfig_DATA = src/libtrace.pc

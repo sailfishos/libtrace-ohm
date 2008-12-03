@@ -2,9 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <unistd.h>
 #include <errno.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "simple-trace.h"
+
+#define STAMP_FORMAT    "%Y-%m-%d %H:%M:%S"
+#define STAMP_STRFLEN   (4+1+2+1+2+1+2+1+2+1+2)  /* YYYY-MMM-DD hh:mm:ss */
+#define STAMP_MSECLEN   (1+3)                    /*                     .mmm */
+#define STAMP_SIZE      (STAMP_STRFLEN + STAMP_MSECLEN + 1)
 
 
 #define BITS_PER_INT   ((int)sizeof(int) * 8)
@@ -81,7 +89,7 @@
 
 static trace_context_t *contexts;
 static int              ncontext;
-static char            *default_header = "[%C]";
+static char            *default_header = "[%C] ";
 
 
 static trace_context_t *context_find(const char *name,
@@ -102,6 +110,11 @@ static inline int set_bit(trace_bits_t *tb, int n);
 static inline int tst_bit(trace_bits_t *tb, int n);
 
 
+static int check_header(const char *header);
+static int format_message(trace_context_t *ctx, int id,
+                          const char *file, int line, const char *func,
+                          char *buf, int bufsize,
+                          const char *fmt, va_list args);
 
 
 /********************
@@ -166,7 +179,7 @@ trace_context_add(const char *name)
         goto nomem;
     
     ctx->header      = default_header;
-    ctx->destination = (FILE *)TRACE_TO_STDERR;
+    ctx->destination = stderr;
 
     init_bits(&ctx->bits);
     init_bits(&ctx->mask);
@@ -242,6 +255,67 @@ trace_context_disable(int cid)
     }
 
     ctx->disabled = TRUE;
+    return 0;
+}
+
+
+/********************
+ * trace_context_target
+ ********************/
+int
+trace_context_target(int cid, const char *target)
+{
+    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    FILE            *tfp, *ofp;
+
+    if (ctx != NULL) {
+        ofp = ctx->destination;
+
+        if      (target == TRACE_TO_STDERR) tfp = stderr;
+        else if (target == TRACE_TO_STDOUT) tfp = stdout;
+        else                                tfp = fopen(target, "a");
+        
+        if (tfp == NULL)
+            return -1;
+        
+        if (ofp != stderr && ofp != stdout)
+            fclose(ofp);
+
+        ctx->destination = tfp;
+        return 0;
+    }
+    else {
+        errno = ENOENT;
+        return -1;
+    }
+}
+
+
+/********************
+ * trace_context_header
+ ********************/
+int
+trace_context_header(int cid, const char *header)
+{
+    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    
+    if (ctx == NULL) {
+        errno = ENOENT;
+        return -1;
+    }
+
+    if (check_header(header) < 0)
+        return -1;
+    else {
+        if (ctx->header != default_header)
+            FREE(ctx->header);
+        if ((ctx->header = STRDUP(header)) == NULL) {
+            errno = ENOMEM;
+            ctx->header = default_header;
+            return -1;
+        }
+    }
+
     return 0;
 }
 
@@ -350,22 +424,26 @@ trace_flag_tst(int id)
 
 
 /********************
- * trace_write
+ * trace_message
  ********************/
 void
-trace_write(int id, const char *format, ...)
+__trace_write(int id, const char *file, int line, const char *func,
+              const char *format, ...)
 {
     int              cid = FLAG_CTX(id);
     trace_context_t *ctx = CONTEXT_LOOKUP(cid);
     va_list          ap;
+    char             buf[4096];
+    int              n;
     
     if (ctx == NULL || ctx->disabled || !trace_flag_tst(id))
         return;
     
     va_start(ap, format);
-    vfprintf(stdout, format, ap);
-    fflush(stdout);
+    n = format_message(ctx, id, file, line, func, buf, sizeof(buf), format, ap);
     va_end(ap);
+    fflush(ctx->destination);
+    write(fileno(ctx->destination), buf, n);
 }
 
 
@@ -441,8 +519,10 @@ trace_module_add(int cid, trace_module_t *module)
     trace_flag_t    *mf, *f;
     int              i, nflag, n;
 
-    if (ctx == NULL)
+    if (ctx == NULL) {
+        errno = ENOENT;
         return -1;
+    }
 
     if (module->name == NULL) {
         TRACE_WARNING("Module with NULL name for context %s.", ctx->name);
@@ -608,6 +688,277 @@ module_free(trace_context_t *ctx, trace_module_t *module)
     module->nflag = 0;
 }
 
+
+
+/*****************************************************************************
+ *                           *** message formatting ***                      *
+ *****************************************************************************/
+
+/********************
+ * get_timestamp
+ ********************/
+static char *
+get_timestamp(char *buf, struct timeval *tv)
+{
+    struct tm  tm;
+    time_t     now;
+    int        ms;
+    char      *d;
+
+    /* must have buffer of TIMESTAMP_SIZE or more bytes */
+    
+    if (unlikely(gettimeofday(tv, NULL) < 0)) {
+        strcpy(buf, "???? ??? ?? ??:??:??");
+        return buf;
+    }
+    now = tv->tv_sec;
+    ms  = tv->tv_usec / 1000;
+
+    if (unlikely(gmtime_r(&now, &tm) == NULL)) {
+        strcpy(buf, "???? ??? ?? ??:??:??");
+        return buf;
+    }
+    
+    d = buf;
+    strftime(d, STAMP_SIZE, STAMP_FORMAT, &tm);
+    d += STAMP_STRFLEN;
+    
+    d[0] = '.';
+    d[1] = '0' + ms / 100; ms %= 100;
+    d[2] = '0' + ms /  10; ms %=  10;
+    d[3] = '0' + ms;
+    d[4] = '\0';
+    
+    return buf;
+}
+
+
+/********************
+ * format_message
+ ********************/
+static int
+format_message(trace_context_t *ctx, int id,
+               const char *file, int line, const char *func,
+               char *buf, int bufsize, const char *format, va_list args)
+{
+#define CHECK_SPACE(need, got) do {                     \
+        if ((got) < (need))                             \
+            goto nospace;                               \
+    } while (0)
+    
+#define TIMEVAL_DIFF(diff, now, prev) do {                        \
+        diff.tv_sec = now.tv_sec - prev.tv_sec;                   \
+        if (now.tv_usec > prev.tv_usec)                           \
+            diff.tv_usec = now.tv_usec - prev.tv_usec;            \
+        else {                                                    \
+            diff.tv_sec--;                                        \
+            diff.tv_usec = 1000000 - prev.tv_usec + now.tv_usec;  \
+        }                                                         \
+    } while (0)
+
+    
+    trace_module_t *mod;
+    trace_flag_t   *flg;
+    int             m, f;
+
+    const char *s;
+    char       *d, stamp[STAMP_SIZE];
+    int         left, n, msg_printed;
+
+    struct timeval diff, now;
+    
+    
+    mod = NULL;
+    flg = NULL;
+    now.tv_sec = now.tv_usec = 0;
+    msg_printed = FALSE;
+    stamp[0] = '\0';
+
+    s    = ctx->header;
+    d    = buf;
+    left = bufsize - 1;
+
+    while (*s && left > 0) {
+        
+        if (*s != '%') {
+            *d++ = *s++;
+            left--;
+            continue;
+        }
+
+        s++;
+
+        switch (*s) {
+        case 'c':                                           /* context name */
+            n = snprintf(d, left, "%s", ctx->name);
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'm':                                            /* module name */
+            m   = FLAG_MOD(id);
+            mod = MODULE_LOOKUP(ctx, m);
+            n   = snprintf(d, left, "%s", mod ? mod->name : "<unknown>");
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'f':                                              /* flag name */
+            if (mod == NULL) {
+                m   = FLAG_MOD(id);
+                mod = MODULE_LOOKUP(ctx, m);
+            }
+            f   = FLAG_IDX(id);
+            flg = FLAG_LOOKUP(mod, f);
+            n   = snprintf(d, left, "%s", flg ? flg->name : "<unknown>");
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'W':                         /* __FUNCTION__@__FILE__:__LINE__ */
+            n = snprintf(d, left, "%s@%s:%d", func, file, line);
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'C':                                           /* __FUNCTION__ */
+            n = snprintf(d, left, "%s", func);
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'F':                                               /* __FILE__ */
+            n = snprintf(d, left, "%s", file);
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'L':                                               /* __LINE__ */
+            n = snprintf(d, left, "%d", line);
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+            
+        case 'U':                                /* absolute UTC time stamp */
+            n = snprintf(d, left, "%s", get_timestamp(stamp, &now));
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+
+        case 'u':                                   /* delta UTC time stamp */
+            if (!ctx->prev.tv_sec) {
+                n = snprintf(d, left, "%s",
+                             stamp[0] ? stamp : get_timestamp(stamp, &now));
+            }
+            else {
+                if (!now.tv_sec)
+                    gettimeofday(&now, NULL);
+                TIMEVAL_DIFF(diff, now, ctx->prev);
+                n = snprintf(d, left, "+%4.4d.%3.3d",
+                             (int)diff.tv_sec, (int)diff.tv_usec % 1000);
+            }
+            ctx->prev = now;
+            CHECK_SPACE(n, left);
+            d    += n;
+            left -= n;
+            break;
+        
+        case 'M':                                  /* user supplied message */
+            n = vsnprintf(d, left, format, args);
+            CHECK_SPACE(n, left);
+            d    += (n - 1);                       /* chop off trailing '\n' */
+            left -= (n - 1);
+            msg_printed = TRUE;
+            break;
+
+        default:
+            *d++ = *s;
+            left--;
+        }
+
+        s++;
+    }
+    
+    if (!msg_printed) {
+        n = vsnprintf(d, left, format, args);
+        CHECK_SPACE(n, left);
+        d    += n;
+        left -= n;
+    }
+    else {
+        if (left < 2)
+            goto nospace;
+        *d++ = '\n';
+        *d   = '\0';
+    }
+    
+    return bufsize - left;
+    
+
+ nospace:
+    /* in the case of overflow try to end the message with '...\0' */
+    if (bufsize >= 4) {
+        d = buf + bufsize - 1 - 3;
+        d[0] = d[1] = d[2] = '.';
+        d[3] = '\0';
+    }
+    else {
+        *d = '\0';
+    }
+    errno = EOVERFLOW;
+    return -1;
+}
+
+
+
+/********************
+ * check_header
+ ********************/
+static int
+check_header(const char *header)
+{
+    const char *s;
+
+    while (*s) {
+        if (*s != '%') {
+            s++;
+            continue;
+        }
+
+        s++;
+
+        switch (*s) {
+        case 'c':                                           /* context name */
+        case 'm':                                            /* module name */
+        case 'f':                                              /* flag name */
+        case 'W':                         /* __FUNCTION__@__FILE__:__LINE__ */
+        case 'C':                                           /* __FUNCTION__ */
+        case 'F':                                               /* __FILE__ */
+        case 'L':                                               /* __LINE__ */
+        case 'U':                                /* absolute UTC time stamp */
+        case 'u':                                   /* delta UTC time stamp */
+        case 'M':                                  /* user supplied message */
+            break;
+        default:
+            TRACE_WARNING("Invalid header format string \"%s\".", header);
+            TRACE_WARNING("Illegal part detected at \"%s\".", s);
+            errno = EINVAL;
+            return -1;
+        }
+        
+        s++;
+    }
+    
+    return 0;
+}
 
 
 
