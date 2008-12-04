@@ -76,6 +76,11 @@
         _f = NULL;                                      \
     _f;})
 
+#define TRACE_INFO(fmt, args...) do {                                   \
+        fprintf(stderr, "[INFO] %s: "fmt"\n", __FUNCTION__, ## args);   \
+        fflush(stderr);                                                  \
+    } while (0)
+
 #define TRACE_WARNING(fmt, args...) do {                                 \
         fprintf(stderr, "[WARNING] %s: "fmt"\n", __FUNCTION__, ## args); \
         fflush(stderr);                                                  \
@@ -424,7 +429,7 @@ trace_flag_tst(int id)
 
 
 /********************
- * trace_message
+ * __trace_write
  ********************/
 void
 __trace_write(int id, const char *file, int line, const char *func,
@@ -960,6 +965,128 @@ check_header(const char *header)
     return 0;
 }
 
+
+/*****************************************************************************
+ *                         *** configuration parsing ***                     *
+ *****************************************************************************/
+#define REDIRECT '>'
+#define MODSEP   '.'
+#define EQUAL    '='
+#define COLON    ':'
+#define SEMICLON ';'
+
+int
+trace_set_flags(const char *config)
+{
+#define MAX_NAME 64
+#define MAX_PATH 256
+    /* trace set test.test1=+foo,-bar,test2=-all+foobar;test2>/tmp/test2.trc */
+
+#define SKIP_WHITESPACE(p) do {                 \
+        if (*(p) == ' ')                        \
+            while (*(p) == ' ')                 \
+                (p)++;                          \
+    } while (0);
+
+#define COPY_TOKEN(s, buf, max, delim) ({                               \
+        size_t  _l = strcspn((s), (delim));                             \
+        char    _d;                                                     \
+        int     _strip = strchr((delim), ' ') != NULL;                  \
+        if (_l > (max) - 1) {                                           \
+            TRACE_ERROR("Failed to parse command \"%s\".", config);     \
+            TRACE_ERROR("Parse error occured at \"%s\".", (s));         \
+            errno = EINVAL;                                             \
+            return -1;                                                  \
+        }                                                               \
+        strncpy((buf), (s), _l);                                        \
+        (buf)[_l] = '\0';                                               \
+        (s) += _l;                                                      \
+        _d   = *(s);                                                    \
+        /* strip any surrounding whitespace if it is in delim */        \
+        if (_d == ' ') {                                                \
+            if (_strip) {                                               \
+                SKIP_WHITESPACE(s);                                     \
+                _d = *(s);                                              \
+                if (_d && strchr((delim), _d)) {                        \
+                    (s)++;                                              \
+                    SKIP_WHITESPACE(s);                                 \
+                }                                                       \
+            }                                                           \
+        }                                                               \
+        else {                                                          \
+            if (_strip && *(s)) {                                       \
+                (s)++;                                                  \
+                SKIP_WHITESPACE(s);                                     \
+            }                                                           \
+        }                                                               \
+        _d; })
+    
+    const char *s;
+    char        context[MAX_NAME], module[MAX_NAME], flag[MAX_NAME], delim;
+    char        target[MAX_PATH];
+
+    s = config;
+    SKIP_WHITESPACE(s);
+    
+    while (*s) {
+        
+        /* dig out context name */
+        delim = COPY_TOKEN(s, context, sizeof(context), ".> ");
+        if (delim == '>') {
+            delim = COPY_TOKEN(s, target, sizeof(target), ";\n ");
+            TRACE_INFO("should redirect %s to \"%s\"", context, target);
+            continue;
+        }
+        
+        if (!context[0]) {
+            TRACE_ERROR("Failed to parse command \"%s\".", config);
+            TRACE_ERROR("Missing context name.");
+            errno = EINVAL;
+            return -1;
+        }
+        if (!*s)
+            goto premature_end;
+        
+        /* dig out module name */
+        delim = COPY_TOKEN(s, module, sizeof(module), "= ");
+        if (!module[0]) {
+            TRACE_ERROR("Failed to parse command \"%s\".", config);
+            TRACE_ERROR("Missing module name.");
+            errno = EINVAL;
+            return -1;
+        }
+        if (!*s)
+            goto premature_end;
+
+        /* dig out flag name */
+    next_flag:
+        delim = COPY_TOKEN(s, flag, sizeof(flag), ",; ");
+        if (!flag[0]) {
+            TRACE_ERROR("Failed to parse command \"%s\".", config);
+            TRACE_ERROR("Missing flag name.");
+            errno = EINVAL;
+            return -1;
+        }
+        
+        TRACE_INFO("should '%s' for module '%s' of context '%s'...",
+                   flag, module, context);
+        
+        if (delim == ',')
+            goto next_flag;
+    
+        if (delim == ';') {
+            context[0] = module[0] = '\0';
+        }
+    }
+
+    return 0;
+    
+ premature_end:
+    TRACE_ERROR("Failed to parse command \"%s\".", config);
+    TRACE_ERROR("Premature end of command.");
+    errno = EINVAL;
+    return -1;
+}
 
 
 

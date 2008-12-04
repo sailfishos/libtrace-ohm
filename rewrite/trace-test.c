@@ -23,7 +23,8 @@
 int main(int argc, char *argv[])
 {
     int  ctx, i, n;
-    
+    char command[256];
+
     /* trace flags */
     int DBG_GRAPH, DBG_VAR, DBG_RESOLVE, DBG_ACTION, DBG_VM;
 
@@ -77,8 +78,10 @@ int main(int argc, char *argv[])
             FLIP(ACTION, 3);
             FLIP(VM, 4);
             
-            if (n > 0)
+
+            if (n > 0 && argc > 1)
                 usleep((i & 0x3) * 333333);
+
             trace_write(DBG_GRAPH  , "DBG_GRAPH");
             trace_write(DBG_VAR    , "DBG_VAR");
             trace_write(DBG_RESOLVE, "DBG_RESOLVE");
@@ -86,6 +89,19 @@ int main(int argc, char *argv[])
             trace_write(DBG_VM     , "DBG_VM");
         }
     }
+
+    
+    printf("trace> ");
+    while (fgets(command, sizeof(command), stdin) != NULL) {
+        char *nl;
+        if ((nl = strchr(command, '\n')) != NULL)
+            *nl = '\0';
+        if (!strcmp(command, "quit"))
+            exit(0);
+        trace_set_flags(command);
+        printf("trace> ");
+    }
+    
 
     if (trace_module_del(ctx, "test") != 0)
         fatal(1, "failed to remove trace module %s (%d: %s)", "test",

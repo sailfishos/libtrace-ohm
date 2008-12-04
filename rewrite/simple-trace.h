@@ -126,7 +126,6 @@ int  trace_context_target(int cid, const char *target);
 int  trace_context_enable(int cid);
 int  trace_context_disable(int cid);
 
-
 int  trace_module_add(int cid, trace_module_t *module);
 int  trace_module_del(int cid, const char *name);
 
@@ -134,8 +133,14 @@ int  trace_flag_set(int id);
 int  trace_flag_clr(int id);
 int  trace_flag_tst(int id);
 
+int  trace_set_flags(const char *config);
+
 void __trace_write(int id, const char *file, int line, const char *func,
                    const char *format, ...);
+
+
+
+
 
 
 #if 0
