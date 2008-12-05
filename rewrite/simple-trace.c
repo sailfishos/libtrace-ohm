@@ -104,6 +104,9 @@ static void             context_del (trace_context_t *ctx);
 static trace_module_t *module_find(trace_context_t *ctx, const char *name,
                                    trace_module_t **deleted);
 static void module_free(trace_context_t *ctx, trace_module_t *module);
+static trace_flag_t *flag_find(trace_module_t *module,
+                               const char *name, trace_flag_t **deleted);
+
 
 static inline int alloc_flag(trace_context_t *ctx);
 static inline int free_flag (trace_context_t *ctx, int flag);
@@ -265,30 +268,40 @@ trace_context_disable(int cid)
 
 
 /********************
+ * context_target
+ ********************/
+static int
+context_target(trace_context_t *ctx, const char *target)
+{
+    FILE *tfp, *ofp;
+
+    ofp = ctx->destination;
+
+    if      (target == TRACE_TO_STDERR) tfp = stderr;
+    else if (target == TRACE_TO_STDOUT) tfp = stdout;
+    else                                tfp = fopen(target, "a");
+    
+    if (tfp == NULL)
+        return -1;
+    
+    if (ofp != NULL && ofp != stderr && ofp != stdout)
+        fclose(ofp);
+    
+    ctx->destination = tfp;
+    return 0;
+}
+
+
+/********************
  * trace_context_target
  ********************/
 int
 trace_context_target(int cid, const char *target)
 {
     trace_context_t *ctx = CONTEXT_LOOKUP(cid);
-    FILE            *tfp, *ofp;
 
-    if (ctx != NULL) {
-        ofp = ctx->destination;
-
-        if      (target == TRACE_TO_STDERR) tfp = stderr;
-        else if (target == TRACE_TO_STDOUT) tfp = stdout;
-        else                                tfp = fopen(target, "a");
-        
-        if (tfp == NULL)
-            return -1;
-        
-        if (ofp != stderr && ofp != stdout)
-            fclose(ofp);
-
-        ctx->destination = tfp;
-        return 0;
-    }
+    if (ctx != NULL)
+        return context_target(ctx, target);
     else {
         errno = ENOENT;
         return -1;
@@ -695,6 +708,33 @@ module_free(trace_context_t *ctx, trace_module_t *module)
 
 
 
+/********************
+ * flag_find
+ ********************/
+static trace_flag_t *
+flag_find(trace_module_t *module, const char *name, trace_flag_t **deleted)
+{
+    trace_flag_t *f;
+    int           i;
+
+    if (deleted != NULL)
+        *deleted = NULL;
+    
+    for (i = 0, f = module->flags; i < module->nflag; i++, f++) {
+        if (f->name == NULL) {
+            if (deleted != NULL && *deleted == NULL)
+                *deleted = f;
+            continue;
+        }
+        if (!strcmp(f->name, name))
+            return f;
+    }
+    
+    errno = ENOENT;
+    return NULL;
+}
+
+
 /*****************************************************************************
  *                           *** message formatting ***                      *
  *****************************************************************************/
@@ -1020,7 +1060,7 @@ trace_set_flags(const char *config)
             }                                                           \
         }                                                               \
         _d; })
-    
+
     const char *s;
     char        context[MAX_NAME], module[MAX_NAME], flag[MAX_NAME], delim;
     char        target[MAX_PATH];
@@ -1032,9 +1072,21 @@ trace_set_flags(const char *config)
         
         /* dig out context name */
         delim = COPY_TOKEN(s, context, sizeof(context), ".> ");
+        
+        if ((ctx = context_find(context, NULL)) == NULL)
+            TRACE_ERROR("Context \"%s\" not found.");
+        
         if (delim == '>') {
             delim = COPY_TOKEN(s, target, sizeof(target), ";\n ");
-            TRACE_INFO("should redirect %s to \"%s\"", context, target);
+        
+            if (context != NULL) {
+                if (context_target(ctx, target) != 0)
+                    TRACE_ERROR("Failed to redirect context %s to %s.",
+                                context, target);
+                else
+                    TRACE_INFO("Context %s redirected to %s.", context,
+                               target);
+            }
             continue;
         }
         
@@ -1058,6 +1110,10 @@ trace_set_flags(const char *config)
         if (!*s)
             goto premature_end;
 
+        if (ctx != NULL)
+            if ((mod = module_find(ctx, module, NULL)) == NULL)
+                TRACE_ERROR("Module %s.%s not found.", context, module);
+        
         /* dig out flag name */
     next_flag:
         delim = COPY_TOKEN(s, flag, sizeof(flag), ",; ");
@@ -1068,6 +1124,20 @@ trace_set_flags(const char *config)
             return -1;
         }
         
+        if (mod != NULL) {
+            char *fname;
+            if (flag[0] == '-' || flag[0] == '+')
+                fname = flag + 1;
+            else
+                fname = flag;
+            
+            if ((flg = flag_find(module, fname, NULL)) == NULL)
+                TRACE_ERROR("Flag %s.%s.%s not found.", context, module, flag);
+            else
+                (flag[0] == '-' ? flag_clr : flag_set
+                 trace_flag_clr :
+                 trace_flag_set)(FLAG_ID(ctx->id, mod->id
+
         TRACE_INFO("should '%s' for module '%s' of context '%s'...",
                    flag, module, context);
         
