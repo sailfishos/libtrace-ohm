@@ -76,9 +76,10 @@
         _f = NULL;                                      \
     _f;})
 
+
 #define TRACE_INFO(fmt, args...) do {                                   \
-        fprintf(stderr, "[INFO] %s: "fmt"\n", __FUNCTION__, ## args);   \
-        fflush(stderr);                                                  \
+        fprintf(stdout, "[INFO] "fmt"\n", ## args);                     \
+        fflush(stdout);                                                 \
     } while (0)
 
 #define TRACE_WARNING(fmt, args...) do {                                 \
@@ -109,7 +110,6 @@ static trace_flag_t *flag_find(trace_module_t *module,
 
 
 static inline int alloc_flag(trace_context_t *ctx);
-static inline int free_flag (trace_context_t *ctx, int flag);
 static void       init_bits (trace_bits_t *bits);
 static void       free_bits (trace_bits_t *bits);
 
@@ -368,7 +368,7 @@ trace_flag_set(int id)
         return -1;
     }
     
-    return set_bit(&ctx->bits, flg->bit);
+    return set_bit(&ctx->mask, flg->bit);
 }
 
 
@@ -403,7 +403,7 @@ trace_flag_clr(int id)
     }
         
 
-    return clr_bit(&ctx->bits, flg->bit);
+    return clr_bit(&ctx->mask, flg->bit);
 }
 
 
@@ -437,7 +437,7 @@ trace_flag_tst(int id)
         return 0;
     }
         
-    return tst_bit(&ctx->bits, flg->bit);
+    return tst_bit(&ctx->mask, flg->bit);
 }
 
 
@@ -698,8 +698,10 @@ module_free(trace_context_t *ctx, trace_module_t *module)
         FREE(flag->descr);
         flag->name  = NULL;
         flag->descr = NULL;
-        if (ctx != NULL)
-            free_flag(ctx, flag->bit);
+        if (ctx != NULL) {
+            clr_bit(&ctx->bits, flag->bit);
+            clr_bit(&ctx->mask, flag->bit);
+        }
     }
     FREE(module->flags);
     module->flags = NULL;
@@ -970,7 +972,7 @@ format_message(trace_context_t *ctx, int id,
 static int
 check_header(const char *header)
 {
-    const char *s;
+    const char *s = header;
 
     while (*s) {
         if (*s != '%') {
@@ -1015,6 +1017,102 @@ check_header(const char *header)
 #define COLON    ':'
 #define SEMICLON ';'
 
+#define FLAG_ALL "all"
+#define WILDCARD "*"
+
+
+/********************
+ * flip_flag
+ ********************/
+int
+flip_flag(char *context, char *module, char *flag)
+{
+    trace_context_t *cptr;
+    trace_module_t  *mptr;
+    trace_flag_t    *fptr;
+    int              nctx, nmod, nflg, off = FALSE;
+
+    switch (flag[0]) {
+    case '-': off = TRUE;
+    case '+': flag++;
+    }
+    
+    if (!strcmp(context, WILDCARD)) {
+        cptr = contexts;
+        nctx = ncontext;
+    }
+    else {
+        if ((cptr = context_find(context, NULL)) == NULL) {
+            TRACE_ERROR("Context \"%s\" does not exist.", context);
+            errno = ENOENT;
+            return -1;
+        }
+        nctx = 1;
+    }
+
+    for ( ; nctx > 0; cptr++, nctx--) {
+        if (cptr->name == NULL)                    /* skip deleted contexts */
+            continue;
+
+        if (!strcmp(module, WILDCARD)) {
+            mptr = cptr->modules;
+            nmod = cptr->nmodule;
+        }
+        else {
+            if ((mptr = module_find(cptr, module, NULL)) == NULL) {
+                TRACE_ERROR("Module %s.%s does not exist.", context, module);
+                errno = ENOENT;
+                return -1;
+            }
+            nmod = 1;
+        }
+
+        
+        for ( ; nmod > 0; mptr++, nmod--) {
+
+            if (mptr->name == NULL)                /* skip deleted modules */
+                continue;
+        
+            if (!strcmp(flag, FLAG_ALL)) {
+                fptr = mptr->flags;
+                nflg = mptr->nflag;
+            }
+            else {
+                if ((fptr = flag_find(mptr, flag, NULL)) == NULL) {
+                    TRACE_ERROR("Flag %s.%s.%s does not exists.", context,
+                                module, flag);
+                    errno = ENOENT;
+                    return -1;
+                }
+                nflg = 1;
+            }
+
+            for ( ; nflg > 0; fptr++, nflg--) {
+                if (fptr->name == NULL)            /* skip deleted flags */
+                    continue;
+
+                if (off) {
+                    clr_bit(&cptr->mask, fptr->bit);
+                    TRACE_INFO("%s.%s.%s is now off.", cptr->name, mptr->name,
+                               fptr->name);
+                }
+                else {
+                    set_bit(&cptr->mask, fptr->bit);
+                    TRACE_INFO("%s.%s.%s is now on.", cptr->name, mptr->name,
+                               fptr->name);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+
+/********************
+ * trace_set_flags
+ ********************/
 int
 trace_set_flags(const char *config)
 {
@@ -1042,7 +1140,7 @@ trace_set_flags(const char *config)
         (buf)[_l] = '\0';                                               \
         (s) += _l;                                                      \
         _d   = *(s);                                                    \
-        /* strip any surrounding whitespace if it is in delim */        \
+        /* strip any surrounding whitespace if it is a delimiter */     \
         if (_d == ' ') {                                                \
             if (_strip) {                                               \
                 SKIP_WHITESPACE(s);                                     \
@@ -1073,13 +1171,12 @@ trace_set_flags(const char *config)
         /* dig out context name */
         delim = COPY_TOKEN(s, context, sizeof(context), ".> ");
         
-        if ((ctx = context_find(context, NULL)) == NULL)
-            TRACE_ERROR("Context \"%s\" not found.");
-        
         if (delim == '>') {
+            trace_context_t *ctx = context_find(context, NULL);
+            
             delim = COPY_TOKEN(s, target, sizeof(target), ";\n ");
-        
-            if (context != NULL) {
+
+            if (context != NULL && ctx != NULL) {
                 if (context_target(ctx, target) != 0)
                     TRACE_ERROR("Failed to redirect context %s to %s.",
                                 context, target);
@@ -1110,10 +1207,6 @@ trace_set_flags(const char *config)
         if (!*s)
             goto premature_end;
 
-        if (ctx != NULL)
-            if ((mod = module_find(ctx, module, NULL)) == NULL)
-                TRACE_ERROR("Module %s.%s not found.", context, module);
-        
         /* dig out flag name */
     next_flag:
         delim = COPY_TOKEN(s, flag, sizeof(flag), ",; ");
@@ -1123,23 +1216,13 @@ trace_set_flags(const char *config)
             errno = EINVAL;
             return -1;
         }
-        
-        if (mod != NULL) {
-            char *fname;
-            if (flag[0] == '-' || flag[0] == '+')
-                fname = flag + 1;
-            else
-                fname = flag;
-            
-            if ((flg = flag_find(module, fname, NULL)) == NULL)
-                TRACE_ERROR("Flag %s.%s.%s not found.", context, module, flag);
-            else
-                (flag[0] == '-' ? flag_clr : flag_set
-                 trace_flag_clr :
-                 trace_flag_set)(FLAG_ID(ctx->id, mod->id
 
+        /*
         TRACE_INFO("should '%s' for module '%s' of context '%s'...",
                    flag, module, context);
+        */
+        
+        flip_flag(context, module, flag);
         
         if (delim == ',')
             goto next_flag;
@@ -1211,29 +1294,6 @@ alloc_bit(trace_bits_t *bits)
 
 
 /********************
- * free_bit
- ********************/
-static int
-free_bit(trace_bits_t *bits, int n)
-{
-    unsigned long *wptr;
-    
-    if (n < 0 || n > bits->nbit) {
-        errno = ERANGE;
-        return -1;
-    }
-    
-    if (bits->nbit <= BITS_PER_LONG)
-        wptr = &bits->bits.word;
-    else
-        wptr = bits->bits.wptr + (n / BITS_PER_LONG);
-    
-    *wptr &= ~(0x1 << (n & (BITS_PER_LONG - 1)));
-    return 0;
-}
-
-
-/********************
  * set_bit
  ********************/
 static inline int
@@ -1269,9 +1329,9 @@ clr_bit(trace_bits_t *bits, int i)
         if (bits->nbit <= BITS_PER_LONG)
             wptr = &bits->bits.word;
         else
-            wptr = &bits->bits.wptr[i / BITS_PER_LONG];
-        *wptr &= ~(1 << (i & (BITS_PER_LONG - 1)));
-        
+            wptr = bits->bits.wptr + (i / BITS_PER_LONG);
+
+        *wptr &= ~(0x1 << (i & (BITS_PER_LONG - 1)));
         return 0;
     }
     else {
@@ -1354,7 +1414,6 @@ realloc_bits(trace_bits_t *bits, int n)
                 errno = ENOMEM;
                 return -1;
             }
-            bits->bits.wptr = wptr;
         }
     }
     
@@ -1394,16 +1453,6 @@ alloc_flag(trace_context_t *ctx)
     }
 
     return bit;
-}
-
-
-/********************
- * free_flag
- ********************/
-static inline int
-free_flag(trace_context_t *ctx, int flag)
-{
-    return free_bit(&ctx->bits, flag);
 }
 
 

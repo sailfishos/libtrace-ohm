@@ -22,7 +22,7 @@
 
 int main(int argc, char *argv[])
 {
-    int  ctx, i, n;
+    int  ctx, i, n, done;
     char command[256];
 
     /* trace flags */
@@ -63,45 +63,64 @@ int main(int argc, char *argv[])
 
 #define FLIP(id, b)                                                     \
     ((i) & (0x1<<(b)) ? trace_flag_set : trace_flag_clr)(DBG_##id)
-    
-    for (n = 0; n < 2; n++) {
-        if (n & 0x1)
-            trace_context_enable(ctx);
-        else
-            trace_context_disable(ctx);
-        
-        for (i = 0; i < 32; i++) {
-            SHOW(i);
-            FLIP(GRAPH, 0);
-            FLIP(VAR, 1);
-            FLIP(RESOLVE, 2);
-            FLIP(ACTION, 3);
-            FLIP(VM, 4);
+
+
+    trace_set_flags("*.*=+all");
+    trace_context_enable(ctx);
+
+    done = FALSE;
+    while (!done) {
+
+#if 0
+        for (n = 0; n < 2; n++) {
+            if (n & 0x1)
+                trace_context_enable(ctx);
+            else
+                trace_context_disable(ctx);
+
+            for (i = 0; i < 32; i++) {
+                SHOW(i);
+                FLIP(GRAPH, 0);
+                FLIP(VAR, 1);
+                FLIP(RESOLVE, 2);
+                FLIP(ACTION, 3);
+                FLIP(VM, 4);
             
 
-            if (n > 0 && argc > 1)
-                usleep((i & 0x3) * 333333);
+                if (n > 0 && argc > 1)
+                    usleep((i & 0x3) * 333333);
 
-            trace_write(DBG_GRAPH  , "DBG_GRAPH");
-            trace_write(DBG_VAR    , "DBG_VAR");
-            trace_write(DBG_RESOLVE, "DBG_RESOLVE");
-            trace_write(DBG_ACTION , "DBG_ACTION");
-            trace_write(DBG_VM     , "DBG_VM");
+            }
+        }
+#else
+        trace_write(DBG_GRAPH  , "DBG_GRAPH");
+        trace_write(DBG_VAR    , "DBG_VAR");
+        trace_write(DBG_RESOLVE, "DBG_RESOLVE");
+        trace_write(DBG_ACTION , "DBG_ACTION");
+        trace_write(DBG_VM     , "DBG_VM");
+#endif
+
+    
+
+        while (!done) {
+            printf("trace> ");
+            if (fgets(command, sizeof(command), stdin) == NULL)
+                continue;
+            char *nl;
+            if ((nl = strchr(command, '\n')) != NULL)
+                *nl = '\0';
+            if (!strcmp(command, "quit"))
+                done = TRUE;
+            else if (!strcmp(command, "show"))
+                printf("I would if I could...\n");
+            else if (!strcmp(command, "test") || !strcmp(command, "run"))
+                break;
+            else if (!strcmp(command, "help"))
+                printf("quit|show|test|context.module=[+|-]f1...[+|-]fn\n");
+            else
+                trace_set_flags(command);
         }
     }
-
-    
-    printf("trace> ");
-    while (fgets(command, sizeof(command), stdin) != NULL) {
-        char *nl;
-        if ((nl = strchr(command, '\n')) != NULL)
-            *nl = '\0';
-        if (!strcmp(command, "quit"))
-            exit(0);
-        trace_set_flags(command);
-        printf("trace> ");
-    }
-    
 
     if (trace_module_del(ctx, "test") != 0)
         fatal(1, "failed to remove trace module %s (%d: %s)", "test",
