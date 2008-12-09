@@ -8,11 +8,14 @@
 #include <sys/time.h>
 
 #include "simple-trace.h"
+#include "mm.h"
+
 
 #define STAMP_FORMAT    "%Y-%m-%d %H:%M:%S"
 #define STAMP_STRFLEN   (4+1+2+1+2+1+2+1+2+1+2)  /* YYYY-MMM-DD hh:mm:ss */
 #define STAMP_MSECLEN   (1+3)                    /*                     .mmm */
 #define STAMP_SIZE      (STAMP_STRFLEN + STAMP_MSECLEN + 1)
+#define STAMP_UNKNOWN   "???? ??? ?? ??:??:??"
 
 
 #define BITS_PER_INT   ((int)sizeof(int) * 8)
@@ -30,7 +33,6 @@
 #define IDX_MASK     0xff
 #define BIT_MASK     0xff
 
-
 #define FLAG_ID(c, m, i, b)                 \
     ((((c) & CTX_MASK) << CTX_SHIFT) |      \
      (((m) & MOD_MASK) << MOD_SHIFT) |      \
@@ -42,84 +44,139 @@
 #define FLAG_IDX(id) (((id) >> IDX_SHIFT) & IDX_MASK)
 #define FLAG_BIT(id) ( (id)               & BIT_MASK)
 
-#define CONTEXT_LOOKUP(cid) ({                  \
-    trace_context_t *_ctx;                      \
-    if (unlikely(cid < 0 || cid >= ncontext))   \
-        _ctx = NULL;                            \
-    else                                        \
-        _ctx = contexts[cid].name ?             \
-            contexts + (cid) : NULL;            \
-    _ctx;})
+
+
+
+
+/*
+ * a trace flag
+ */
+
+typedef struct {
+    char *name;                              /* symbolic flag name */
+    char *descr;                             /* description of flag */
+    int   bit;                               /* allocated bit in module */
+    int  *flagptr;                           /* reported to trace 'client' */
+} flag_t;
+
+
+/*
+ * a trace module is a named set of trace flags
+ */
+
+typedef struct {
+    char   *name;                            /* symbolic module name */
+    flag_t *flags;                           /* trace flags of this module */
+    int     nflag;                           /* number of flags */
+    int     id;                              /* module id within context */
+} module_t;
+
+
+/*
+ * a trace context is a named set of trace modules
+ */
+
+typedef struct {
+    union {
+        unsigned long  word;                 /* 32 or less dense bits */
+        unsigned long *wptr;                 /* > 32 or sparse bits */
+    } bits;
+    int                nbit;
+} bitmap_t;
+
+
+typedef struct {
+    char           *name;                    /* symbolic context name */
+    char           *format;                  /* trace format */
+    FILE           *destination;             /* destination for messages */
+    int             disabled;                /* global state of this context */
+    bitmap_t        bits;                    /* allocated bits */
+    bitmap_t        mask;                    /* current state of flags */
+    module_t       *modules;                 /* actual modules */
+    int             nmodule;                 /* number of modules */
+    int             id;                      /* context id */
+    struct timeval  prev;                    /* timestamp of last message */
+} context_t;
+
+
+#define CONTEXT_LOOKUP(cid) ({                          \
+            context_t *_ctx;                            \
+            if (unlikely(cid < 0 || cid >= ncontext))   \
+                _ctx = NULL;                            \
+            else                                        \
+                _ctx = contexts[cid].name ?             \
+                    contexts + (cid) : NULL;            \
+            _ctx;})
 
 #define MODULE_LOOKUP(ctx, id) ({                       \
-    trace_module_t *_m;                                 \
-    if ((ctx) != NULL) {                                \
-        if (0 <= (id) && (id) < (ctx)->nmodule)         \
-            _m = (ctx)->modules[id].name ?              \
-                (ctx)->modules + (id) : NULL;           \
-        else                                            \
-            _m = NULL;                                  \
-    }                                                   \
-    else                                                \
-        _m = NULL;                                      \
-    _m;})
+            module_t *_m;                               \
+            if ((ctx) != NULL) {                        \
+                if (0 <= (id) && (id) < (ctx)->nmodule) \
+                    _m = (ctx)->modules[id].name ?      \
+                        (ctx)->modules + (id) : NULL;   \
+                else                                    \
+                    _m = NULL;                          \
+            }                                           \
+            else                                        \
+                _m = NULL;                              \
+            _m;})
 
 #define FLAG_LOOKUP(mod, idx) ({                        \
-    trace_flag_t *_f;                                   \
-    if ((mod) != NULL) {                                \
-        if (0 <= (idx) && (idx) < (mod)->nflag)         \
-            _f = (mod)->flags + (idx);                  \
-        else                                            \
-            _f = NULL;                                  \
-    }                                                   \
-    else                                                \
-        _f = NULL;                                      \
-    _f;})
+            flag_t *_f;                                 \
+            if ((mod) != NULL) {                        \
+                if (0 <= (idx) && (idx) < (mod)->nflag) \
+                    _f = (mod)->flags + (idx);          \
+                else                                    \
+                    _f = NULL;                          \
+            }                                           \
+            else                                        \
+                _f = NULL;                              \
+            _f;})
 
 
-#define TRACE_INFO(fmt, args...) do {                                   \
+#define INFO(fmt, args...) do {                                         \
         fprintf(stdout, "[INFO] "fmt"\n", ## args);                     \
         fflush(stdout);                                                 \
     } while (0)
 
-#define TRACE_WARNING(fmt, args...) do {                                 \
+#define WARNING(fmt, args...) do {                                       \
         fprintf(stderr, "[WARNING] %s: "fmt"\n", __FUNCTION__, ## args); \
         fflush(stderr);                                                  \
     } while (0)
 
-#define TRACE_ERROR(fmt, args...) do {                                   \
-        fprintf(stderr, "[ERROR] %s: "fmt"\n", __FUNCTION__, ## args);   \
-        fflush(stderr);                                                  \
+#define ERROR(fmt, args...) do {                                        \
+        fprintf(stderr, "[ERROR] %s: "fmt"\n", __FUNCTION__, ## args);  \
+        fflush(stderr);                                                 \
     } while (0)
 
 
-static trace_context_t *contexts;
-static int              ncontext;
-static char            *default_format = "[%C] ";
+
+static context_t *contexts;
+static int        ncontext;
+static char      *default_format = "[%C] ";
 
 
-static trace_context_t *context_find(const char *name,
-                                     trace_context_t **deleted);
-static void             context_del (trace_context_t *ctx);
+static context_t *context_find(const char *name, context_t **deleted);
+static void       context_del (context_t *ctx);
 
-static trace_module_t *module_find(trace_context_t *ctx, const char *name,
-                                   trace_module_t **deleted);
-static void module_free(trace_context_t *ctx, trace_module_t *module);
-static trace_flag_t *flag_find(trace_module_t *module,
-                               const char *name, trace_flag_t **deleted);
+static module_t *module_find(context_t *ctx, const char *name,
+                             module_t **deleted);
+static void      module_free(context_t *ctx, module_t *module);
+
+static flag_t *flag_find(module_t *module, const char *name, flag_t **deleted);
 
 
-static inline int alloc_flag(trace_context_t *ctx);
-static void       init_bits (trace_bits_t *bits);
-static void       free_bits (trace_bits_t *bits);
+static inline int alloc_flag(context_t *ctx);
+static void       init_bits (bitmap_t *bits);
+static void       free_bits (bitmap_t *bits);
 
-static inline int clr_bit(trace_bits_t *tb, int n);
-static inline int set_bit(trace_bits_t *tb, int n);
-static inline int tst_bit(trace_bits_t *tb, int n);
+static inline int clr_bit(bitmap_t *tb, int n);
+static inline int set_bit(bitmap_t *tb, int n);
+static inline int tst_bit(bitmap_t *tb, int n);
 
 
 static int check_format(const char *format);
-static int format_message(trace_context_t *ctx, int id,
+static int format_message(context_t *ctx, int id,
                           const char *file, int line, const char *func,
                           char *buf, int bufsize,
                           const char *fmt, va_list args);
@@ -145,7 +202,7 @@ trace_init(void)
 void
 trace_exit(void)
 {
-    trace_context_t *c;
+    context_t *c;
     int              i;
     
     for (i = 0; i < ncontext; i++) {
@@ -165,7 +222,7 @@ trace_exit(void)
 int
 trace_context_add(const char *name)
 {
-    trace_context_t *ctx, *deleted;
+    context_t *ctx, *deleted;
 
     if ((ctx = context_find(name, &deleted)) != NULL)
         return ctx->id;
@@ -211,7 +268,7 @@ trace_context_add(const char *name)
 int
 trace_context_del(int cid)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    context_t *ctx = CONTEXT_LOOKUP(cid);
     
     if (ctx == NULL) {
         errno = ENOENT;
@@ -237,7 +294,7 @@ trace_context_del(int cid)
 int
 trace_context_enable(int cid)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    context_t *ctx = CONTEXT_LOOKUP(cid);
 
     if (ctx == NULL) {
         errno = ENOMEM;
@@ -255,7 +312,7 @@ trace_context_enable(int cid)
 int
 trace_context_disable(int cid)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    context_t *ctx = CONTEXT_LOOKUP(cid);
 
     if (ctx == NULL) {
         errno = ENOMEM;
@@ -271,7 +328,7 @@ trace_context_disable(int cid)
  * context_target
  ********************/
 static int
-context_target(trace_context_t *ctx, const char *target)
+context_target(context_t *ctx, const char *target)
 {
     FILE *nfp, *ofp;
 
@@ -300,7 +357,7 @@ context_target(trace_context_t *ctx, const char *target)
 int
 trace_context_target(int cid, const char *target)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    context_t *ctx = CONTEXT_LOOKUP(cid);
 
     if (ctx != NULL)
         return context_target(ctx, target);
@@ -315,7 +372,7 @@ trace_context_target(int cid, const char *target)
  * context_format
  ********************/
 int
-context_format(trace_context_t *ctx, const char *format)
+context_format(context_t *ctx, const char *format)
 {
     if (check_format(format) < 0)
         return -1;
@@ -332,13 +389,14 @@ context_format(trace_context_t *ctx, const char *format)
     return 0;
 }
 
+
 /********************
  * trace_context_format
  ********************/
 int
 trace_context_format(int cid, const char *format)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    context_t *ctx = CONTEXT_LOOKUP(cid);
     
     if (ctx != NULL)
         return context_format(ctx, format);
@@ -355,10 +413,10 @@ trace_context_format(int cid, const char *format)
 int
 trace_flag_set(int id)
 {
-    trace_context_t *ctx;
-    trace_module_t  *mod;
-    trace_flag_t    *flg;
-    int              c, m, i, b;
+    context_t *ctx;
+    module_t  *mod;
+    flag_t    *flg;
+    int        c, m, i, b;
     
     c = FLAG_CTX(id);
     m = FLAG_MOD(id);
@@ -389,10 +447,10 @@ trace_flag_set(int id)
 int
 trace_flag_clr(int id)
 {
-    trace_context_t *ctx;
-    trace_module_t  *mod;
-    trace_flag_t    *flg;
-    int              c, m, i, b;
+    context_t *ctx;
+    module_t  *mod;
+    flag_t    *flg;
+    int        c, m, i, b;
     
     c = FLAG_CTX(id);
     m = FLAG_MOD(id);
@@ -424,10 +482,10 @@ trace_flag_clr(int id)
 int
 trace_flag_tst(int id)
 {
-    trace_context_t *ctx;
-    trace_module_t  *mod;
-    trace_flag_t    *flg;
-    int              c, m, i, b;
+    context_t *ctx;
+    module_t  *mod;
+    flag_t    *flg;
+    int        c, m, i, b;
     
     c = FLAG_CTX(id);
     m = FLAG_MOD(id);
@@ -460,7 +518,7 @@ __trace_write(int id, const char *file, int line, const char *func,
               const char *format, ...)
 {
     int              cid = FLAG_CTX(id);
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    context_t *ctx = CONTEXT_LOOKUP(cid);
     va_list          ap;
     char             buf[4096];
     int              n;
@@ -471,9 +529,9 @@ __trace_write(int id, const char *file, int line, const char *func,
     va_start(ap, format);
     n = format_message(ctx, id, file, line, func, buf, sizeof(buf), format, ap);
     va_end(ap);
-    fflush(ctx->destination);
     if (n <= 0)
         return;
+    fflush(ctx->destination);
     write(fileno(ctx->destination), buf, n - 1);
 }
 
@@ -482,7 +540,7 @@ __trace_write(int id, const char *file, int line, const char *func,
  * context_del
  ********************/
 static void
-context_del(trace_context_t *ctx)
+context_del(context_t *ctx)
 {
     int i;
 
@@ -514,10 +572,10 @@ context_del(trace_context_t *ctx)
 /********************
  * context_find
  ********************/
-static trace_context_t *
-context_find(const char *name, trace_context_t **deleted)
+static context_t *
+context_find(const char *name, context_t **deleted)
 {
-    trace_context_t *ctx;
+    context_t *ctx;
     int              i;
 
     if (deleted != NULL)
@@ -543,38 +601,40 @@ context_find(const char *name, trace_context_t **deleted)
  * trace_module_add
  ********************/
 int
-trace_module_add(int cid, trace_module_t *module)
+trace_module_add(int cid, trace_moduledef_t *moddef)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
-    trace_module_t  *m, *deleted;
-    trace_flag_t    *mf, *f;
+    context_t       *ctx = CONTEXT_LOOKUP(cid);
+    trace_flagdef_t *flagdef;
+    module_t        *mod, *deleted;
+    flag_t          *flag;
     int              i, nflag, n;
 
+    
     if (ctx == NULL) {
         errno = ENOENT;
         return -1;
     }
 
-    if (module->name == NULL) {
-        TRACE_WARNING("Module with NULL name for context %s.", ctx->name);
+    if (moddef->name == NULL) {
+        WARNING("Module with NULL name for context %s.", ctx->name);
         errno = EINVAL;
         return -1;
     }
     
-    if (module_find(ctx, module->name, &deleted) != NULL) {
-        TRACE_WARNING("Context %s already has a module %s.", ctx->name,
-                      module->name);
+    if (module_find(ctx, moddef->name, &deleted) != NULL) {
+        WARNING("Context %s already has a module %s.", ctx->name,
+                      moddef->name);
         errno = EEXIST;
         return -1;
     }
 
     nflag = 0;
-    for (i = 0, f = module->flags; i < module->nflag; i++, f++) {
-        if (f->name == NULL || f->flagptr == NULL) {
-            if (i == module->nflag - 1)  /* it's okay to NULL-terminate */
+    for (i = 0, flagdef = moddef->flags; i < moddef->nflag; i++, flagdef++) {
+        if (flagdef->name == NULL || flagdef->flagptr == NULL) {
+            if (i == moddef->nflag - 1)  /* it's okay to NULL-terminate */
                 continue;
-            TRACE_WARNING("#%d flag of %s.%s is invalid.", i + 1, ctx->name,
-                          module->name);
+            WARNING("#%d flag of %s.%s is invalid.", i + 1, ctx->name,
+                          moddef->name);
             errno = EINVAL;
             return -1;
         }
@@ -588,44 +648,44 @@ trace_module_add(int cid, trace_module_t *module)
             return -1;
         }
         
-        m = ctx->modules + ctx->nmodule;
-        m->id = ctx->nmodule++;
+        mod = ctx->modules + ctx->nmodule;
+        mod->id = ctx->nmodule++;
     }
     else
-        m = deleted;
+        mod = deleted;
     
-    if ((m->name = STRDUP(module->name)) == NULL) {
+    if ((mod->name = STRDUP(moddef->name)) == NULL) {
         errno = ENOMEM;
         return -1;
     }
     
-    if ((m->flags = ALLOC_ARR(typeof(*m->flags), nflag)) == NULL) {
+    if ((mod->flags = ALLOC_ARR(typeof(*mod->flags), nflag)) == NULL) {
         errno = ENOMEM;
         return -1;
     }
     
-    m->nflag = nflag;
+    mod->nflag = nflag;
 
     /* save module and allocate flag bits */
-    for (i = 0; i < m->nflag; i++) {
-        mf = m->flags + i;
-        f  = module->flags + i;
-        if ((mf->name  = STRDUP(f->name))   == NULL ||
-            (mf->descr = STRDUP(mf->descr)) == NULL ||
-            (mf->bit   = f->bit = alloc_flag(ctx)) < 0) {
-            module_free(ctx, m);
+    for (i = 0; i < nflag; i++) {
+        flag    = mod->flags + i;
+        flagdef = moddef->flags + i;
+        if ((flag->name  = STRDUP(flagdef->name))  == NULL ||
+            (flag->descr = STRDUP(flagdef->descr)) == NULL ||
+            (flag->bit   = alloc_flag(ctx)) < 0) {
+            module_free(ctx, mod);
             errno = ENOMEM;
             return -1;
         }
         
-        if (mf->bit >= MAX_FLAGS) {
-            module_free(ctx, m);
+        if (flag->bit >= MAX_FLAGS) {
+            module_free(ctx, mod);
             errno = EOVERFLOW;
             return -1;
         }
         
-        *f->flagptr = FLAG_ID(ctx->id, m->id, i, f->bit);
-        mf->flagptr = f->flagptr;
+        *flagdef->flagptr = FLAG_ID(ctx->id, mod->id, i, flag->bit);
+        flag->flagptr     = flagdef->flagptr;
     }
     
     return 0;
@@ -638,8 +698,8 @@ trace_module_add(int cid, trace_module_t *module)
 int
 trace_module_del(int cid, const char *name)
 {
-    trace_context_t *ctx;
-    trace_module_t  *module;
+    context_t *ctx;
+    module_t  *module;
 
     if (name == NULL) {
         errno = EINVAL;
@@ -670,11 +730,11 @@ trace_module_del(int cid, const char *name)
 /********************
  * module_find
  ********************/
-static trace_module_t *
-module_find(trace_context_t *ctx, const char *name, trace_module_t **deleted)
+static module_t *
+module_find(context_t *ctx, const char *name, module_t **deleted)
 {
-    trace_module_t *m;
-    int             i;
+    module_t *m;
+    int       i;
 
     if (deleted != NULL)
         *deleted = NULL;
@@ -698,10 +758,10 @@ module_find(trace_context_t *ctx, const char *name, trace_module_t **deleted)
  * module_free
  ********************/
 static void
-module_free(trace_context_t *ctx, trace_module_t *module)
+module_free(context_t *ctx, module_t *module)
 {
-    trace_flag_t *flag;
-    int           i;
+    flag_t *flag;
+    int     i;
 
     FREE(module->name);
     module->name = NULL;
@@ -726,11 +786,11 @@ module_free(trace_context_t *ctx, trace_module_t *module)
 /********************
  * flag_find
  ********************/
-static trace_flag_t *
-flag_find(trace_module_t *module, const char *name, trace_flag_t **deleted)
+static flag_t *
+flag_find(module_t *module, const char *name, flag_t **deleted)
 {
-    trace_flag_t *f;
-    int           i;
+    flag_t *f;
+    int     i;
 
     if (deleted != NULL)
         *deleted = NULL;
@@ -768,14 +828,14 @@ get_timestamp(char *buf, struct timeval *tv)
     /* must have buffer of TIMESTAMP_SIZE or more bytes */
     
     if (unlikely(gettimeofday(tv, NULL) < 0)) {
-        strcpy(buf, "???? ??? ?? ??:??:??");
+        strcpy(buf, STAMP_UNKNOWN);
         return buf;
     }
     now = tv->tv_sec;
     ms  = tv->tv_usec / 1000;
 
     if (unlikely(gmtime_r(&now, &tm) == NULL)) {
-        strcpy(buf, "???? ??? ?? ??:??:??");
+        strcpy(buf, STAMP_UNKNOWN);
         return buf;
     }
     
@@ -797,7 +857,7 @@ get_timestamp(char *buf, struct timeval *tv)
  * format_message
  ********************/
 static int
-format_message(trace_context_t *ctx, int id,
+format_message(context_t *ctx, int id,
                const char *file, int line, const char *func,
                char *buf, int bufsize, const char *format, va_list args)
 {
@@ -817,9 +877,9 @@ format_message(trace_context_t *ctx, int id,
     } while (0)
 
     
-    trace_module_t *mod;
-    trace_flag_t   *flg;
-    int             m, f;
+    module_t *mod;
+    flag_t   *flg;
+    int       m, f;
 
     const char *s;
     char       *d, stamp[STAMP_SIZE];
@@ -1013,8 +1073,8 @@ check_format(const char *format)
         case 'M':                                  /* user supplied message */
             break;
         default:
-            TRACE_WARNING("Invalid format format string \"%s\".", format);
-            TRACE_WARNING("Illegal part detected at \"%s\".", s);
+            ERROR("Invalid format format string \"%s\".", format);
+            ERROR("Illegal part detected at \"%s\".", s);
             errno = EILSEQ;
             return -1;
         }
@@ -1042,13 +1102,13 @@ check_format(const char *format)
 /********************
  * flip_flag
  ********************/
-int
+static int
 flip_flag(char *context, char *module, char *flag)
 {
-    trace_context_t *cptr;
-    trace_module_t  *mptr;
-    trace_flag_t    *fptr;
-    int              nctx, nmod, nflg, off = FALSE;
+    context_t *cptr;
+    module_t  *mptr;
+    flag_t    *fptr;
+    int        nctx, nmod, nflg, off = FALSE;
 
     switch (flag[0]) {
     case '-': off = TRUE;
@@ -1061,7 +1121,7 @@ flip_flag(char *context, char *module, char *flag)
     }
     else {
         if ((cptr = context_find(context, NULL)) == NULL) {
-            TRACE_ERROR("Context \"%s\" does not exist.", context);
+            ERROR("Context \"%s\" does not exist.", context);
             errno = ENOENT;
             return -1;
         }
@@ -1078,7 +1138,7 @@ flip_flag(char *context, char *module, char *flag)
         }
         else {
             if ((mptr = module_find(cptr, module, NULL)) == NULL) {
-                TRACE_ERROR("Module %s.%s does not exist.", context, module);
+                ERROR("Module %s.%s does not exist.", context, module);
                 errno = ENOENT;
                 return -1;
             }
@@ -1097,7 +1157,7 @@ flip_flag(char *context, char *module, char *flag)
             }
             else {
                 if ((fptr = flag_find(mptr, flag, NULL)) == NULL) {
-                    TRACE_ERROR("Flag %s.%s.%s does not exists.", context,
+                    ERROR("Flag %s.%s.%s does not exists.", context,
                                 module, flag);
                     errno = ENOENT;
                     return -1;
@@ -1111,12 +1171,12 @@ flip_flag(char *context, char *module, char *flag)
 
                 if (off) {
                     clr_bit(&cptr->mask, fptr->bit);
-                    TRACE_INFO("%s.%s.%s is now off.", cptr->name, mptr->name,
+                    INFO("%s.%s.%s is now off.", cptr->name, mptr->name,
                                fptr->name);
                 }
                 else {
                     set_bit(&cptr->mask, fptr->bit);
-                    TRACE_INFO("%s.%s.%s is now on.", cptr->name, mptr->name,
+                    INFO("%s.%s.%s is now on.", cptr->name, mptr->name,
                                fptr->name);
                 }
             }
@@ -1149,8 +1209,8 @@ trace_configure(const char *config)
         char    _d;                                                     \
         int     _strip = strchr((delim), ' ') != NULL;                  \
         if (_l > (max) - 1) {                                           \
-            TRACE_ERROR("Failed to parse command \"%s\".", config);     \
-            TRACE_ERROR("Parse error occured at \"%s\".", (s));         \
+            ERROR("Failed to parse command \"%s\".", config);     \
+            ERROR("Parse error occured at \"%s\".", (s));         \
             errno = EINVAL;                                             \
             return -1;                                                  \
         }                                                               \
@@ -1177,7 +1237,7 @@ trace_configure(const char *config)
         }                                                               \
         _d; })
 
-    trace_context_t *ctx;
+    context_t *ctx;
     const char *s;
     char        context[MAX_NAME], module[MAX_NAME], flag[MAX_NAME];
     char        command[MAX_NAME], target[MAX_PATH], argument[MAX_PATH], delim;
@@ -1199,10 +1259,10 @@ trace_configure(const char *config)
 
             if (context != NULL && ctx != NULL) {
                 if (context_target(ctx, target) != 0)
-                    TRACE_ERROR("Failed to redirect context %s to %s.",
+                    ERROR("Failed to redirect context %s to %s.",
                                 context, target);
                 else
-                    TRACE_INFO("Context %s redirected to %s.", context,
+                    INFO("Context %s redirected to %s.", context,
                                target);
             }
             continue;
@@ -1210,20 +1270,20 @@ trace_configure(const char *config)
 
         if (delim == ' ') {                                  /* other command */
             if ((ctx = context_find(context, NULL)) == NULL) {
-                TRACE_ERROR("Context %s does not exist.", context);
+                ERROR("Context %s does not exist.", context);
                 errno = ENOENT;
             }
             
             delim = COPY_TOKEN(s, command, sizeof(command), " ;,\n");
             
             if (delim != ' ') {
-                TRACE_ERROR("Failed to parse command \"%s\".", config);
+                ERROR("Failed to parse command \"%s\".", config);
                 errno = EINVAL;
                 return -1;
             }
             
             if (delim != ';') {
-                TRACE_ERROR("Failed to parse command \"%s\".", config);
+                ERROR("Failed to parse command \"%s\".", config);
                 errno = EINVAL;
                 return -1;
             }
@@ -1234,7 +1294,7 @@ trace_configure(const char *config)
             if (!strcmp(command, "target"))
                 context_target(ctx, argument);
             else {
-                TRACE_ERROR("Unknown command \"%s\" for context %s.", command,
+                ERROR("Unknown command \"%s\" for context %s.", command,
                             context);
                 errno = EINVAL;
             }
@@ -1242,8 +1302,8 @@ trace_configure(const char *config)
         }
 
         if (!context[0]) {
-            TRACE_ERROR("Failed to parse command \"%s\".", config);
-            TRACE_ERROR("Missing context name.");
+            ERROR("Failed to parse command \"%s\".", config);
+            ERROR("Missing context name.");
             errno = EINVAL;
             return -1;
         }
@@ -1253,8 +1313,8 @@ trace_configure(const char *config)
         /* dig out module */
         delim = COPY_TOKEN(s, module, sizeof(module), "= ");
         if (!module[0]) {
-            TRACE_ERROR("Failed to parse command \"%s\".", config);
-            TRACE_ERROR("Missing module name.");
+            ERROR("Failed to parse command \"%s\".", config);
+            ERROR("Missing module name.");
             errno = EINVAL;
             return -1;
         }
@@ -1265,14 +1325,14 @@ trace_configure(const char *config)
     next_flag:
         delim = COPY_TOKEN(s, flag, sizeof(flag), ",; ");
         if (!flag[0]) {
-            TRACE_ERROR("Failed to parse command \"%s\".", config);
-            TRACE_ERROR("Missing flag name.");
+            ERROR("Failed to parse command \"%s\".", config);
+            ERROR("Missing flag name.");
             errno = EINVAL;
             return -1;
         }
 
         /*
-        TRACE_INFO("should '%s' for module '%s' of context '%s'...",
+        INFO("should '%s' for module '%s' of context '%s'...",
                    flag, module, context);
         */
         
@@ -1289,8 +1349,8 @@ trace_configure(const char *config)
     return 0;
     
  premature_end:
-    TRACE_ERROR("Failed to parse command \"%s\".", config);
-    TRACE_ERROR("Premature end of command.");
+    ERROR("Failed to parse command \"%s\".", config);
+    ERROR("Premature end of command.");
     errno = EINVAL;
     return -1;
 }
@@ -1306,7 +1366,7 @@ trace_configure(const char *config)
  * alloc_bit
  ********************/
 static inline int
-alloc_bit(trace_bits_t *bits)
+alloc_bit(bitmap_t *bits)
 {
     unsigned long *wptr, word;
     int            nw, i;
@@ -1351,7 +1411,7 @@ alloc_bit(trace_bits_t *bits)
  * set_bit
  ********************/
 static inline int
-set_bit(trace_bits_t *bits, int i)
+set_bit(bitmap_t *bits, int i)
 {
     unsigned long *wptr;
     
@@ -1375,7 +1435,7 @@ set_bit(trace_bits_t *bits, int i)
  * clr_bit
  ********************/
 static inline int
-clr_bit(trace_bits_t *bits, int i)
+clr_bit(bitmap_t *bits, int i)
 {
     unsigned long *wptr;
 	
@@ -1399,7 +1459,7 @@ clr_bit(trace_bits_t *bits, int i)
  * tst_bit
  ********************/
 static inline int
-tst_bit(trace_bits_t *bits, int i)
+tst_bit(bitmap_t *bits, int i)
 {
     unsigned long word;
 	
@@ -1420,7 +1480,7 @@ tst_bit(trace_bits_t *bits, int i)
  * init_bits
  ********************/
 static void
-init_bits(trace_bits_t *bits)
+init_bits(bitmap_t *bits)
 {
     bits->nbit = 32;
 }
@@ -1430,7 +1490,7 @@ init_bits(trace_bits_t *bits)
  * realloc_bits
  ********************/
 static int
-realloc_bits(trace_bits_t *bits, int n)
+realloc_bits(bitmap_t *bits, int n)
 {
     int            oldn, newn;
     unsigned long *wptr;
@@ -1481,7 +1541,7 @@ realloc_bits(trace_bits_t *bits, int n)
  * free_bits
  ********************/
 static void
-free_bits(trace_bits_t *bits)
+free_bits(bitmap_t *bits)
 {
     if (bits->nbit > BITS_PER_LONG) {
         free(bits->bits.wptr);
@@ -1496,10 +1556,10 @@ free_bits(trace_bits_t *bits)
  * alloc_flag
  ********************/
 static inline int
-alloc_flag(trace_context_t *ctx)
+alloc_flag(context_t *ctx)
 {
-    trace_bits_t *bits = &ctx->bits;
-    int           bit  = alloc_bit(bits);
+    bitmap_t *bits = &ctx->bits;
+    int       bit  = alloc_bit(bits);
 
     if (bit < 0) {
         realloc_bits(bits, bits->nbit + 1);
