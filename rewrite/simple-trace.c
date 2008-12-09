@@ -910,6 +910,8 @@ format_message(context_t *ctx, int id,
 
         s++;
 
+        /* hmm... should we add support for field width (ie. %15c) ? */
+
         switch (*s) {
         case 'c':                                           /* context name */
             n = snprintf(d, left, "%s", ctx->name);
@@ -1085,554 +1087,6 @@ check_format(const char *format)
     
     return 0;
 }
-
-
-/*****************************************************************************
- *                         *** configuration parsing ***                     *
- *****************************************************************************/
-
-#define FLAG_ALL "all"
-#define WILDCARD "*"
-#define EQUAL    '='
-#define MODSEP   '.'
-#define FLAGSEP  ','
-#define CMDSEP   ';'
-#define ENABLE   "enabled"
-#define DISABLE  "disable"
-#define TARGET   "target"
-#define REDIR    ">"
-#define FORMAT   "format"
-
-
-/********************
- * flip_flag
- ********************/
-static int
-flip_flag(char *context, char *module, char *flag)
-{
-    context_t *cptr;
-    module_t  *mptr;
-    flag_t    *fptr;
-    int        nctx, nmod, nflg, off = FALSE;
-
-    switch (flag[0]) {
-    case '-': off = TRUE;
-    case '+': flag++;
-    }
-    
-    if (!strcmp(context, WILDCARD)) {
-        cptr = contexts;
-        nctx = ncontext;
-    }
-    else {
-        if ((cptr = context_find(context, NULL)) == NULL) {
-            ERROR("Context \"%s\" does not exist.", context);
-            errno = ENOENT;
-            return -1;
-        }
-        nctx = 1;
-    }
-
-    for ( ; nctx > 0; cptr++, nctx--) {
-        if (cptr->name == NULL)                    /* skip deleted contexts */
-            continue;
-
-        if (!strcmp(module, WILDCARD)) {
-            mptr = cptr->modules;
-            nmod = cptr->nmodule;
-        }
-        else {
-            if ((mptr = module_find(cptr, module, NULL)) == NULL) {
-                ERROR("Module %s.%s does not exist.", context, module);
-                errno = ENOENT;
-                return -1;
-            }
-            nmod = 1;
-        }
-
-        
-        for ( ; nmod > 0; mptr++, nmod--) {
-
-            if (mptr->name == NULL)                /* skip deleted modules */
-                continue;
-        
-            if (!strcmp(flag, FLAG_ALL)) {
-                fptr = mptr->flags;
-                nflg = mptr->nflag;
-            }
-            else {
-                if ((fptr = flag_find(mptr, flag, NULL)) == NULL) {
-                    ERROR("Flag %s.%s.%s does not exists.", context,
-                                module, flag);
-                    errno = ENOENT;
-                    return -1;
-                }
-                nflg = 1;
-            }
-
-            for ( ; nflg > 0; fptr++, nflg--) {
-                if (fptr->name == NULL)            /* skip deleted flags */
-                    continue;
-
-                if (off) {
-                    clr_bit(&cptr->mask, fptr->bit);
-                    INFO("%s.%s.%s is now off.", cptr->name, mptr->name,
-                               fptr->name);
-                }
-                else {
-                    set_bit(&cptr->mask, fptr->bit);
-                    INFO("%s.%s.%s is now on.", cptr->name, mptr->name,
-                               fptr->name);
-                }
-            }
-        }
-    }
-
-    return 0;
-}
-
-
-/********************
- * context_command
- ********************/
-static int
-context_command(char *context, char *command, char *args)
-{
-    context_t *cptr;
-    int        nctx, status;
-    char       arg[MAX_NAME];
-    size_t     len;
-
-
-    /* select all or only the named context */
-    if (!strcmp(context, WILDCARD)) {
-        cptr = contexts;
-        nctx = ncontext;
-    }
-    else {
-        if ((cptr = context_find(context, NULL)) == NULL) {
-            ERROR("Context '%s' does not exist.", context);
-            errno = ENOENT;
-            return -1;
-        }
-        nctx = 1;
-    }
-
-    
-    /* command: 'context enable' or 'context disable' */
-    if (!strcmp(command, DISABLE) || !strcmp(command, ENABLE)) {
-        if (args != NULL && *args)
-            WARNING("Ignoring extraneous argument '%s'.", args);
-
-        for ( ; nctx > 0; cptr++, nctx--) {
-            if (cptr->name == NULL)
-                continue;
-            cptr->disabled = (command[0] == 'd' ? TRUE : FALSE);
-            INFO("%s is now %sabled.", context, command[0] == 'd' ? "dis":"en");
-        }
-        
-        return 0;
-    }
-    
-    /* command: 'context target path' or 'context > path' */
-    if (!strcmp(command, TARGET) || !strcmp(command, REDIR)) {
-        if (args != NULL && !args) {
-            ERROR("Command target requires a path argument.");
-            errno = EILSEQ;
-            return -1;
-        }
-
-        for (status = 0; nctx > 0; cptr++, nctx--) {
-            if (cptr->name == NULL)
-                continue;
-            if (context_target(cptr, args) != 0) {
-                ERROR("Failed to redirect '%s' to '%s'.", cptr->name, args);
-                status = -1;
-            }
-            else
-                INFO("'%s' redirected to '%s'.", cptr->name, args);
-        }
-
-        return status;
-    }
-    
-    /* command: 'context format 'format string for context' */
-    if (!strcmp(command, FORMAT)) {
-        char *format;
-
-        if ((len = strlen(args)) >= sizeof(arg) - 1) {
-            ERROR("Format string '%s' too long for context '%s'.", args,
-                  context);
-            errno = EILSEQ;
-            return -1;
-        }
-
-        if (len > 2 && ((args[0] == '\'' && args[len-1] == '\'') ||
-                        (args[0] == '"'  && args[len-1] == '"'))) {
-            strncpy(arg, args + 1, len - 2);
-            arg[len-2] = '\0';
-            format = arg;
-        }
-        else
-            format = args;
-        
-        for (status = 0; nctx > 0; cptr++, nctx--) {
-            if (cptr->name == NULL)
-                continue;
-            if (context_format(cptr, format) != 0) {
-                ERROR("Failed to set format %s for '%s'.", args, cptr->name);
-                status = -1;
-            }
-            else
-                INFO("Format for '%s' is now '%s'.", cptr->name, format);
-        }
-
-        return status;
-    }
-
-
-    ERROR("Unkown command '%s' for context '%s'.", command, context);
-    errno = EILSEQ;
-    return -1;
-}
-
-
-#if 1
-
-
-/********************
- * context_configure
- ********************/
-static const char *
-context_configure(char *context, const char *config)
-{
-    char        module[MAX_NAME], flag[MAX_NAME];
-    char        command[MAX_NAME], args[MAX_NAME];
-    const char *s;
-    char       *d;
-    int         l;
-
-
-    s = config;
-    
-    if (*s == MODSEP) {
-        s++;
-        
-        d = module;
-        l = 0;
-        while (*s && *s != EQUAL && l < MAX_NAME - 1) {
-            *d++ = *s++;
-            l++;
-        }
-    
-        if (*s != EQUAL) {
-            ERROR("Expecting '%c' for context flag setting command.", EQUAL);
-            goto invalid_input;
-        }
-        *d = '\0';
-        s++;
-        
-        while (*s) {
-            l = 0;
-            d = flag;
-            while (*s && *s != FLAGSEP && *s != CMDSEP && l < MAX_NAME - 1) {
-                *d++ = *s++;
-                l++;
-            }
-
-            if (*s && *s != FLAGSEP && *s != CMDSEP) {
-                ERROR("Expecting either '%c' or '%c' after flag setting.",
-                      FLAGSEP, CMDSEP);
-                goto invalid_input;
-            }
-            *d = '\0';
-            
-            flip_flag(context, module, flag);
-            
-            if (*s == CMDSEP || !*s)
-                return s;
-            /* else if (*s == FLAGSEP) */
-            s++;
-        }
-    }
-    else if (*s == ' ') {
-        while (*s == ' ')
-            s++;
-        
-        d = command;
-        l = 0;
-        while (*s && *s != ' ' && *s != CMDSEP && l < MAX_NAME - 1) {
-            *d++ = *s++;
-            l++;
-        }
-        
-        if (*s && *s != ' ' && *s != CMDSEP)
-            goto invalid_input;
-        *d = '\0';
-
-        while (*s && *s == ' ')
-            s++;
-        
-        d = args;
-        l = 0;
-        while (*s && *s != CMDSEP) {
-            *d++ = *s++;
-            l++;
-        }
-        
-        if (*s && *s != CMDSEP) {
-            ERROR("Context commands must be terminated by '%c'.", CMDSEP);
-            goto invalid_input;
-        }
-        
-        *d = '\0';
-
-        context_command(context, command, args);
-        return s;
-    }
-    
-
- invalid_input:
-    ERROR("Invalid command '%s' for context '%s'.", config, context);
-    errno = EILSEQ;
-    return NULL;
-
-}
-
-
-
-
-
-
-
-
-/*
- * Possible commands:
- *
- *    context.module=[+|-]flag1, ..., [+|-]flagn
- *    context > path, or context target path
- *    context format 'format'
- *    context enable
- *    context disable
- */
-
-
-/********************
- * trace_configure
- ********************/
-int
-trace_configure(const char *config)
-{
-    char        context[MAX_NAME];
-    const char *s;
-    char       *d;
-    int         l;
-    
-    
-    if (config == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-    
-    s = config;
-
-    while (s != NULL && *s) {
-        d = context;
-        l = 0;
-        while ((('a' <= *s && *s <= 'z') || ('A' <= *s && *s <= 'Z') ||
-                ('0' <= *s && *s <= '9') || (*s == '_' || *s == '_') ||
-                *s == '*') && l < MAX_NAME - 1) {
-            *d++ = *s++;
-            l++;
-        }
-        *d = '\0';
-        
-        if ((s = context_configure(context, s)) == NULL)
-            return -1;
-        
-        if (*s == ';')
-            s++;
-    }
-
-    return 0;
-}
-
-
-
-#else /* !0 */
-
-
-/********************
- * trace_configure
- ********************/
-int
-trace_configure(const char *config)
-{
-#define MAX_NAME 64
-#define MAX_PATH 256
-    /* trace set test.test1=+foo,-bar,test2=-all+foobar;test2>/tmp/test2.trc */
-
-#define SKIP_WHITESPACE(p) do {                 \
-        if (*(p) == ' ')                        \
-            while (*(p) == ' ')                 \
-                (p)++;                          \
-    } while (0);
-
-#define COPY_TOKEN(s, buf, max, delim) ({                               \
-        size_t  _l = strcspn((s), (delim));                             \
-        char    _d;                                                     \
-        int     _strip = strchr((delim), ' ') != NULL;                  \
-        if (_l > (max) - 1) {                                           \
-            ERROR("Failed to parse command \"%s\".", config);     \
-            ERROR("Parse error occured at \"%s\".", (s));         \
-            errno = EINVAL;                                             \
-            return -1;                                                  \
-        }                                                               \
-        strncpy((buf), (s), _l);                                        \
-        (buf)[_l] = '\0';                                               \
-        (s) += _l;                                                      \
-        _d   = *(s);                                                    \
-        /* strip any surrounding whitespace if it is a delimiter */     \
-        if (_d == ' ') {                                                \
-            if (_strip) {                                               \
-                SKIP_WHITESPACE(s);                                     \
-                _d = *(s);                                              \
-                if (_d && strchr((delim), _d)) {                        \
-                    (s)++;                                              \
-                    SKIP_WHITESPACE(s);                                 \
-                }                                                       \
-            }                                                           \
-        }                                                               \
-        else {                                                          \
-            if (_strip && *(s)) {                                       \
-                (s)++;                                                  \
-                SKIP_WHITESPACE(s);                                     \
-            }                                                           \
-        }                                                               \
-        _d; })
-
-    context_t *ctx;
-    const char *s;
-    char        context[MAX_NAME], module[MAX_NAME], flag[MAX_NAME];
-    char        command[MAX_NAME], target[MAX_PATH], argument[MAX_PATH], delim;
-
-
-    s = config;
-    SKIP_WHITESPACE(s);
-    
-    while (*s) {
-        
-        /* get context name */
-        delim = COPY_TOKEN(s, context, sizeof(context), ".> ");
-        
-        /* check command type (redirection, other command, or module name) */
-        if (delim == '>') {                                  /* redirection */
-            ctx = context_find(context, NULL);
-            
-            delim = COPY_TOKEN(s, target, sizeof(target), ";\n ");
-
-            if (context != NULL && ctx != NULL) {
-                if (context_target(ctx, target) != 0)
-                    ERROR("Failed to redirect context %s to %s.",
-                                context, target);
-                else
-                    INFO("Context %s redirected to %s.", context,
-                               target);
-            }
-            continue;
-        }
-
-        if (delim == ' ') {                                  /* other command */
-            if ((ctx = context_find(context, NULL)) == NULL) {
-                ERROR("Context %s does not exist.", context);
-                errno = ENOENT;
-            }
-            
-            delim = COPY_TOKEN(s, command, sizeof(command), " ;,\n");
-    
-            printf("*** command = \"%s\"\n", command);
-        
-            if (delim != ' ') {
-                ERROR("Failed to parse command \"%s\".", config);
-                errno = EINVAL;
-                return -1;
-            }
-            
-            if (delim != ';') {
-                ERROR("Failed to parse command \"%s\".", config);
-                errno = EINVAL;
-                return -1;
-            }
-            
-            if (ctx == NULL)
-                continue;
-            
-            if (!strcmp(command, "target"))
-                context_target(ctx, argument);
-            else {
-                ERROR("Unknown command \"%s\" for context %s.", command,
-                            context);
-                errno = EINVAL;
-            }
-            continue;
-        }
-
-        if (!context[0]) {
-            ERROR("Failed to parse command \"%s\".", config);
-            ERROR("Missing context name.");
-            errno = EINVAL;
-            return -1;
-        }
-        if (!*s)
-            goto premature_end;
-        
-        /* dig out module */
-        delim = COPY_TOKEN(s, module, sizeof(module), "= ");
-        if (!module[0]) {
-            ERROR("Failed to parse command \"%s\".", config);
-            ERROR("Missing module name.");
-            errno = EINVAL;
-            return -1;
-        }
-        if (!*s)
-            goto premature_end;
-
-        /* dig out flag name */
-    next_flag:
-        delim = COPY_TOKEN(s, flag, sizeof(flag), ",; ");
-        if (!flag[0]) {
-            ERROR("Failed to parse command \"%s\".", config);
-            ERROR("Missing flag name.");
-            errno = EINVAL;
-            return -1;
-        }
-
-        /*
-        INFO("should '%s' for module '%s' of context '%s'...",
-                   flag, module, context);
-        */
-        
-        flip_flag(context, module, flag);
-        
-        if (delim == ',')
-            goto next_flag;
-    
-        if (delim == ';') {
-            context[0] = module[0] = '\0';
-        }
-    }
-
-    return 0;
-    
- premature_end:
-    ERROR("Failed to parse command \"%s\".", config);
-    ERROR("Premature end of command.");
-    errno = EINVAL;
-    return -1;
-}
-
-
-#endif
 
 
 /*****************************************************************************
@@ -1846,6 +1300,377 @@ alloc_flag(context_t *ctx)
 
     return bit;
 }
+
+
+
+
+/*****************************************************************************
+ *                    *** configuration command parsing ***                  *
+ *****************************************************************************/
+
+
+/*
+ * The possible commands are currently:
+ *
+ *    context.module=[+|-]flag1, ..., [+|-]flagn
+ *    context > path, or context target path
+ *    context format 'format'
+ *    context enable
+ *    context disable
+ */
+
+
+#define FLAG_ALL "all"
+#define WILDCARD "*"
+#define EQUAL    '='
+#define MODSEP   '.'
+#define FLAGSEP  ','
+#define CMDSEP   ';'
+#define ENABLE   "enabled"
+#define DISABLE  "disable"
+#define TARGET   "target"
+#define REDIR    ">"
+#define FORMAT   "format"
+
+
+/********************
+ * flip_flag
+ ********************/
+static int
+flip_flag(char *context, char *module, char *flag)
+{
+    context_t *cptr;
+    module_t  *mptr;
+    flag_t    *fptr;
+    int        nctx, nmod, nflg, off = FALSE;
+
+    switch (flag[0]) {
+    case '-': off = TRUE;
+    case '+': flag++;
+    }
+
+    /* pick all or the named context */
+    if (!strcmp(context, WILDCARD)) {
+        cptr = contexts;
+        nctx = ncontext;
+    }
+    else {
+        if ((cptr = context_find(context, NULL)) == NULL) {
+            ERROR("Context \"%s\" does not exist.", context);
+            errno = ENOENT;
+            return -1;
+        }
+        nctx = 1;
+    }
+
+    for ( ; nctx > 0; cptr++, nctx--) {
+        if (cptr->name == NULL)                    /* skip deleted contexts */
+            continue;
+
+        /* pick all or the named module */
+        if (!strcmp(module, WILDCARD)) {
+            mptr = cptr->modules;
+            nmod = cptr->nmodule;
+        }
+        else {
+            if ((mptr = module_find(cptr, module, NULL)) == NULL) {
+                ERROR("Module %s.%s does not exist.", context, module);
+                errno = ENOENT;
+                return -1;
+            }
+            nmod = 1;
+        }
+
+        
+        for ( ; nmod > 0; mptr++, nmod--) {
+
+            if (mptr->name == NULL)                /* skip deleted modules */
+                continue;
+        
+            /* pick all or the named flag */
+            if (!strcmp(flag, FLAG_ALL)) {
+                fptr = mptr->flags;
+                nflg = mptr->nflag;
+            }
+            else {
+                if ((fptr = flag_find(mptr, flag, NULL)) == NULL) {
+                    ERROR("Flag %s.%s.%s does not exist.", context,
+                          module, flag);
+                    errno = ENOENT;
+                    return -1;
+                }
+                nflg = 1;
+            }
+
+            /* do the actual flag flipping */
+            for ( ; nflg > 0; fptr++, nflg--) {
+                if (fptr->name == NULL)            /* skip deleted flags */
+                    continue;
+
+                if (off) {
+                    clr_bit(&cptr->mask, fptr->bit);
+                    INFO("%s.%s.%s is now off.", cptr->name, mptr->name,
+                               fptr->name);
+                }
+                else {
+                    set_bit(&cptr->mask, fptr->bit);
+                    INFO("%s.%s.%s is now on.", cptr->name, mptr->name,
+                               fptr->name);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+/********************
+ * context_command
+ ********************/
+static int
+context_command(char *context, char *command, char *args)
+{
+    context_t *cptr;
+    int        nctx, status;
+    char       arg[MAX_NAME];
+    size_t     len;
+
+
+    /* select all or only the named context */
+    if (!strcmp(context, WILDCARD)) {
+        cptr = contexts;
+        nctx = ncontext;
+    }
+    else {
+        if ((cptr = context_find(context, NULL)) == NULL) {
+            ERROR("Context '%s' does not exist.", context);
+            errno = ENOENT;
+            return -1;
+        }
+        nctx = 1;
+    }
+
+    
+    /* command: "context enable" or "context disable" */
+    if (!strcmp(command, DISABLE) || !strcmp(command, ENABLE)) {
+        if (args != NULL && *args)
+            WARNING("Ignoring extraneous argument '%s'.", args);
+
+        for ( ; nctx > 0; cptr++, nctx--) {
+            if (cptr->name == NULL)
+                continue;
+            cptr->disabled = (command[0] == 'd' ? TRUE : FALSE);
+            INFO("%s is now %sabled.", context, command[0] == 'd' ? "dis":"en");
+        }
+        
+        return 0;
+    }
+    
+    /* command: "context target path" or "context > path" */
+    if (!strcmp(command, TARGET) || !strcmp(command, REDIR)) {
+        if (args != NULL && !args) {
+            ERROR("Command target requires a path argument.");
+            errno = EILSEQ;
+            return -1;
+        }
+
+        for (status = 0; nctx > 0; cptr++, nctx--) {
+            if (cptr->name == NULL)
+                continue;
+            if (context_target(cptr, args) != 0) {
+                ERROR("Failed to redirect '%s' to '%s'.", cptr->name, args);
+                status = -1;
+            }
+            else
+                INFO("'%s' redirected to '%s'.", cptr->name, args);
+        }
+
+        return status;
+    }
+    
+    /* command: "context format 'format string for context'" */
+    if (!strcmp(command, FORMAT)) {
+        char *format;
+
+        if ((len = strlen(args)) >= sizeof(arg) - 1) {
+            ERROR("Format string '%s' too long for context '%s'.", args,
+                  context);
+            errno = EILSEQ;
+            return -1;
+        }
+
+        if (len > 2 && ((args[0] == '\'' && args[len-1] == '\'') ||
+                        (args[0] == '"'  && args[len-1] == '"'))) {
+            strncpy(arg, args + 1, len - 2);
+            arg[len-2] = '\0';
+            format = arg;
+        }
+        else
+            format = args;
+        
+        for (status = 0; nctx > 0; cptr++, nctx--) {
+            if (cptr->name == NULL)
+                continue;
+            if (context_format(cptr, format) != 0) {
+                ERROR("Failed to set format %s for '%s'.", args, cptr->name);
+                status = -1;
+            }
+            else
+                INFO("Format for '%s' is now '%s'.", cptr->name, format);
+        }
+
+        return status;
+    }
+
+
+    ERROR("Unkown command '%s' for context '%s'.", command, context);
+    errno = EILSEQ;
+    return -1;
+}
+
+
+/********************
+ * context_configure
+ ********************/
+static const char *
+context_configure(char *context, const char *config)
+{
+    char        module[MAX_NAME], flag[MAX_NAME];
+    char        command[MAX_NAME], args[MAX_NAME];
+    const char *s;
+    char       *d;
+    int         l;
+
+
+    s = config;
+    
+    if (*s == MODSEP) {
+        s++;
+        
+        d = module;
+        l = 0;
+        while (*s && *s != EQUAL && l < MAX_NAME - 1) {
+            *d++ = *s++;
+            l++;
+        }
+    
+        if (*s != EQUAL) {
+            ERROR("Expecting '%c' for context flag setting command.", EQUAL);
+            goto invalid_input;
+        }
+        *d = '\0';
+        s++;
+        
+        while (*s) {
+            l = 0;
+            d = flag;
+            while (*s && *s != FLAGSEP && *s != CMDSEP && l < MAX_NAME - 1) {
+                *d++ = *s++;
+                l++;
+            }
+
+            if (*s && *s != FLAGSEP && *s != CMDSEP) {
+                ERROR("Expecting either '%c' or '%c' after flag setting.",
+                      FLAGSEP, CMDSEP);
+                goto invalid_input;
+            }
+            *d = '\0';
+            
+            flip_flag(context, module, flag);
+            
+            if (*s == CMDSEP || !*s)
+                return s;
+            /* else if (*s == FLAGSEP) */
+            s++;
+        }
+    }
+    else if (*s == ' ') {
+        while (*s == ' ')
+            s++;
+        
+        d = command;
+        l = 0;
+        while (*s && *s != ' ' && *s != CMDSEP && l < MAX_NAME - 1) {
+            *d++ = *s++;
+            l++;
+        }
+        
+        if (*s && *s != ' ' && *s != CMDSEP)
+            goto invalid_input;
+        *d = '\0';
+
+        while (*s && *s == ' ')
+            s++;
+        
+        d = args;
+        l = 0;
+        while (*s && *s != CMDSEP) {
+            *d++ = *s++;
+            l++;
+        }
+        
+        if (*s && *s != CMDSEP) {
+            ERROR("Context commands must be terminated by '%c'.", CMDSEP);
+            goto invalid_input;
+        }
+        
+        *d = '\0';
+
+        context_command(context, command, args);
+        return s;
+    }
+    
+
+ invalid_input:
+    ERROR("Invalid command '%s' for context '%s'.", config, context);
+    errno = EILSEQ;
+    return NULL;
+
+}
+
+
+/********************
+ * trace_configure
+ ********************/
+int
+trace_configure(const char *config)
+{
+    char        context[MAX_NAME];
+    const char *s;
+    char       *d;
+    int         l;
+    
+    
+    if (config == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    
+    s = config;
+
+    while (s != NULL && *s) {
+        d = context;
+        l = 0;
+        while ((('a' <= *s && *s <= 'z') || ('A' <= *s && *s <= 'Z') ||
+                ('0' <= *s && *s <= '9') || (*s == '_' || *s == '_') ||
+                *s == '*') && l < MAX_NAME - 1) {
+            *d++ = *s++;
+            l++;
+        }
+        *d = '\0';
+        
+        if ((s = context_configure(context, s)) == NULL)
+            return -1;
+        
+        if (*s == CMDSEP)
+            s++;
+    }
+
+    return 0;
+}
+
+
 
 
 

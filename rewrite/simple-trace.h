@@ -79,6 +79,12 @@ typedef struct {
 #define TRACE_TO_STDOUT     ((char *)0x1)
 #define TRACE_TO_FILE(path) (path)
 
+
+
+/*
+ * macro to generate trace messages
+ */
+
 #define trace_write(id, format, args...)        \
     __trace_write(id, __FILE__, __LINE__, __FUNCTION__, format"\n", ## args)
 
