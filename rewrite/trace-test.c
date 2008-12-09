@@ -65,60 +65,43 @@ int main(int argc, char *argv[])
     ((i) & (0x1<<(b)) ? trace_flag_set : trace_flag_clr)(DBG_##id)
 
 
-    trace_set_flags("*.*=+all");
+    trace_configure("*.*=+all");
     trace_context_enable(ctx);
 
     done = FALSE;
     while (!done) {
 
-#if 0
-        for (n = 0; n < 2; n++) {
-            if (n & 0x1)
-                trace_context_enable(ctx);
-            else
-                trace_context_disable(ctx);
-
-            for (i = 0; i < 32; i++) {
-                SHOW(i);
-                FLIP(GRAPH, 0);
-                FLIP(VAR, 1);
-                FLIP(RESOLVE, 2);
-                FLIP(ACTION, 3);
-                FLIP(VM, 4);
-            
-
-                if (n > 0 && argc > 1)
-                    usleep((i & 0x3) * 333333);
-
-            }
-        }
-#else
         trace_write(DBG_GRAPH  , "DBG_GRAPH");
         trace_write(DBG_VAR    , "DBG_VAR");
         trace_write(DBG_RESOLVE, "DBG_RESOLVE");
         trace_write(DBG_ACTION , "DBG_ACTION");
         trace_write(DBG_VM     , "DBG_VM");
-#endif
-
-    
 
         while (!done) {
+            char *nl;
+
             printf("trace> ");
             if (fgets(command, sizeof(command), stdin) == NULL)
                 continue;
-            char *nl;
             if ((nl = strchr(command, '\n')) != NULL)
                 *nl = '\0';
-            if (!strcmp(command, "quit"))
+
+            if (!strcmp(command, "quit") || !strcmp(command, "exit"))
                 done = TRUE;
             else if (!strcmp(command, "show"))
                 printf("I would if I could...\n");
             else if (!strcmp(command, "test") || !strcmp(command, "run"))
                 break;
-            else if (!strcmp(command, "help"))
-                printf("quit|show|test|context.module=[+|-]f1...[+|-]fn\n");
+            else if (!strcmp(command, "help")) {
+                printf("Possible commands are:\n");
+                printf("quit: quit\n");
+                printf("show: show current trace settings\n");
+                printf("test: write one test trace message per flag\n");
+                printf("context.module=[+|-]f1,...: change trace flags\n");
+                printf("context > file: redirect trace context to file\n");
+            }
             else
-                trace_set_flags(command);
+                trace_configure(command);
         }
     }
 

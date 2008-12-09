@@ -95,7 +95,7 @@
 
 static trace_context_t *contexts;
 static int              ncontext;
-static char            *default_header = "[%C] ";
+static char            *default_format = "[%C] ";
 
 
 static trace_context_t *context_find(const char *name,
@@ -118,7 +118,7 @@ static inline int set_bit(trace_bits_t *tb, int n);
 static inline int tst_bit(trace_bits_t *tb, int n);
 
 
-static int check_header(const char *header);
+static int check_format(const char *format);
 static int format_message(trace_context_t *ctx, int id,
                           const char *file, int line, const char *func,
                           char *buf, int bufsize,
@@ -186,7 +186,7 @@ trace_context_add(const char *name)
     if ((ctx->name = STRDUP(name)) == NULL)
         goto nomem;
     
-    ctx->header      = default_header;
+    ctx->format      = default_format;
     ctx->destination = stderr;
 
     init_bits(&ctx->bits);
@@ -273,21 +273,23 @@ trace_context_disable(int cid)
 static int
 context_target(trace_context_t *ctx, const char *target)
 {
-    FILE *tfp, *ofp;
+    FILE *nfp, *ofp;
 
     ofp = ctx->destination;
 
-    if      (target == TRACE_TO_STDERR) tfp = stderr;
-    else if (target == TRACE_TO_STDOUT) tfp = stdout;
-    else                                tfp = fopen(target, "a");
+    if      (target == TRACE_TO_STDERR) nfp = stderr;
+    else if (target == TRACE_TO_STDOUT) nfp = stdout;
+    else if (!strcmp(target, "stderr")) nfp = stderr;
+    else if (!strcmp(target, "stdout")) nfp = stdout;
+    else                                nfp = fopen(target, "a");
     
-    if (tfp == NULL)
+    if (nfp == NULL)
         return -1;
     
     if (ofp != NULL && ofp != stderr && ofp != stdout)
         fclose(ofp);
     
-    ctx->destination = tfp;
+    ctx->destination = nfp;
     return 0;
 }
 
@@ -310,31 +312,40 @@ trace_context_target(int cid, const char *target)
 
 
 /********************
- * trace_context_header
+ * context_format
  ********************/
 int
-trace_context_header(int cid, const char *header)
+context_format(trace_context_t *ctx, const char *format)
 {
-    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
-    
-    if (ctx == NULL) {
-        errno = ENOENT;
-        return -1;
-    }
-
-    if (check_header(header) < 0)
+    if (check_format(format) < 0)
         return -1;
     else {
-        if (ctx->header != default_header)
-            FREE(ctx->header);
-        if ((ctx->header = STRDUP(header)) == NULL) {
+        if (ctx->format != default_format)
+            FREE(ctx->format);
+        if ((ctx->format = STRDUP(format)) == NULL) {
             errno = ENOMEM;
-            ctx->header = default_header;
+            ctx->format = default_format;
             return -1;
         }
     }
 
     return 0;
+}
+
+/********************
+ * trace_context_format
+ ********************/
+int
+trace_context_format(int cid, const char *format)
+{
+    trace_context_t *ctx = CONTEXT_LOOKUP(cid);
+    
+    if (ctx != NULL)
+        return context_format(ctx, format);
+    else {
+        errno = ENOENT;
+        return -1;
+    }
 }
 
 
@@ -461,7 +472,9 @@ __trace_write(int id, const char *file, int line, const char *func,
     n = format_message(ctx, id, file, line, func, buf, sizeof(buf), format, ap);
     va_end(ap);
     fflush(ctx->destination);
-    write(fileno(ctx->destination), buf, n);
+    if (n <= 0)
+        return;
+    write(fileno(ctx->destination), buf, n - 1);
 }
 
 
@@ -476,9 +489,9 @@ context_del(trace_context_t *ctx)
     FREE(ctx->name);
     ctx->name = NULL;
 
-    if (ctx->header != default_header)
-        FREE(ctx->header);
-    ctx->header = NULL;
+    if (ctx->format != default_format)
+        FREE(ctx->format);
+    ctx->format = NULL;
     
     if (ctx->destination != (FILE *)TRACE_TO_STDERR &&
         ctx->destination != (FILE *)TRACE_TO_STDOUT) {
@@ -821,7 +834,7 @@ format_message(trace_context_t *ctx, int id,
     msg_printed = FALSE;
     stamp[0] = '\0';
 
-    s    = ctx->header;
+    s    = ctx->format;
     d    = buf;
     left = bufsize - 1;
 
@@ -967,13 +980,18 @@ format_message(trace_context_t *ctx, int id,
 
 
 /********************
- * check_header
+ * check_format
  ********************/
 static int
-check_header(const char *header)
+check_format(const char *format)
 {
-    const char *s = header;
+    const char *s = format;
 
+    if (format == NULL || !*format) {
+        errno = EILSEQ;
+        return -1;
+    }
+    
     while (*s) {
         if (*s != '%') {
             s++;
@@ -995,9 +1013,9 @@ check_header(const char *header)
         case 'M':                                  /* user supplied message */
             break;
         default:
-            TRACE_WARNING("Invalid header format string \"%s\".", header);
+            TRACE_WARNING("Invalid format format string \"%s\".", format);
             TRACE_WARNING("Illegal part detected at \"%s\".", s);
-            errno = EINVAL;
+            errno = EILSEQ;
             return -1;
         }
         
@@ -1111,10 +1129,10 @@ flip_flag(char *context, char *module, char *flag)
 
 
 /********************
- * trace_set_flags
+ * trace_configure
  ********************/
 int
-trace_set_flags(const char *config)
+trace_configure(const char *config)
 {
 #define MAX_NAME 64
 #define MAX_PATH 256
@@ -1159,20 +1177,23 @@ trace_set_flags(const char *config)
         }                                                               \
         _d; })
 
+    trace_context_t *ctx;
     const char *s;
-    char        context[MAX_NAME], module[MAX_NAME], flag[MAX_NAME], delim;
-    char        target[MAX_PATH];
+    char        context[MAX_NAME], module[MAX_NAME], flag[MAX_NAME];
+    char        command[MAX_NAME], target[MAX_PATH], argument[MAX_PATH], delim;
+
 
     s = config;
     SKIP_WHITESPACE(s);
     
     while (*s) {
         
-        /* dig out context name */
+        /* get context name */
         delim = COPY_TOKEN(s, context, sizeof(context), ".> ");
         
-        if (delim == '>') {
-            trace_context_t *ctx = context_find(context, NULL);
+        /* check command type (redirection, other command, or module name) */
+        if (delim == '>') {                                  /* redirection */
+            ctx = context_find(context, NULL);
             
             delim = COPY_TOKEN(s, target, sizeof(target), ";\n ");
 
@@ -1186,7 +1207,40 @@ trace_set_flags(const char *config)
             }
             continue;
         }
-        
+
+        if (delim == ' ') {                                  /* other command */
+            if ((ctx = context_find(context, NULL)) == NULL) {
+                TRACE_ERROR("Context %s does not exist.", context);
+                errno = ENOENT;
+            }
+            
+            delim = COPY_TOKEN(s, command, sizeof(command), " ;,\n");
+            
+            if (delim != ' ') {
+                TRACE_ERROR("Failed to parse command \"%s\".", config);
+                errno = EINVAL;
+                return -1;
+            }
+            
+            if (delim != ';') {
+                TRACE_ERROR("Failed to parse command \"%s\".", config);
+                errno = EINVAL;
+                return -1;
+            }
+            
+            if (ctx == NULL)
+                continue;
+            
+            if (!strcmp(command, "target"))
+                context_target(ctx, argument);
+            else {
+                TRACE_ERROR("Unknown command \"%s\" for context %s.", command,
+                            context);
+                errno = EINVAL;
+            }
+            continue;
+        }
+
         if (!context[0]) {
             TRACE_ERROR("Failed to parse command \"%s\".", config);
             TRACE_ERROR("Missing context name.");
@@ -1196,7 +1250,7 @@ trace_set_flags(const char *config)
         if (!*s)
             goto premature_end;
         
-        /* dig out module name */
+        /* dig out module */
         delim = COPY_TOKEN(s, module, sizeof(module), "= ");
         if (!module[0]) {
             TRACE_ERROR("Failed to parse command \"%s\".", config);

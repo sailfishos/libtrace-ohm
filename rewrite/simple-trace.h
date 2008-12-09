@@ -87,7 +87,7 @@ typedef struct {
 
 typedef struct {
     char           *name;                    /* symbolic context name */
-    char           *header;                  /* trace header */
+    char           *format;                  /* trace format */
     FILE           *destination;             /* destination for messages */
     int             disabled;                /* global state of this context */
     trace_bits_t    bits;                    /* allocated bits */
@@ -121,7 +121,7 @@ void trace_exit(void);
 
 int  trace_context_add(const char *name);
 int  trace_context_del(int cid);
-int  trace_context_header(int cid, const char *header);
+int  trace_context_format(int cid, const char *format);
 int  trace_context_target(int cid, const char *target);
 int  trace_context_enable(int cid);
 int  trace_context_disable(int cid);
@@ -149,7 +149,7 @@ int  trace_open (char *name);
 void trace_close(int context);
 
 int  trace_set_target(trace_context_t *ctx, const char *target);
-int  trace_set_header(trace_context_t *ctx, const char *format);
+int  trace_set_format(trace_context_t *ctx, const char *format);
 
 int  trace_enable(trace_context_t *ctx);
 int  trace_disable(trace_context_t *ctx);
@@ -159,7 +159,7 @@ int  trace_clr(trace_context_t *ctx, int flag);
 
 int  trace_message(trace_context_t *ctx, int flag, const char *format, ...);
 
-int  trace_set_flags(const char *request);
+int  trace_configure(const char *request);
 
 #endif
 
