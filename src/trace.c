@@ -792,7 +792,7 @@ format_header(trace_context_t *tc, char *buf, size_t size,
 	const char     *s, *p;
 	char           *d;
 	int             n, left;
-	struct timeval  now;
+	struct timeval  now, diff;
 	trace_tag_t    *t;
 
 	s = tc->header;
@@ -835,10 +835,18 @@ format_header(trace_context_t *tc, char *buf, size_t size,
 		case 'd':                                   /* delta time */
 			if (!tc->last.tv_sec)
 				n = snprintf(d, left, "%s", utc);
-			else
-				n = snprintf(d, left, "+%4.4d.%4.4d",
-							 (int)now.tv_sec  - (int)tc->last.tv_sec,
-							 (int)now.tv_usec - (int)tc->last.tv_usec);
+			else {
+				int sec, usec;
+				sec = now.tv_sec - tc->last.tv_sec;
+				if (now.tv_usec >= tc->last.tv_usec)
+					usec = now.tv_usec - tc->last.tv_usec;
+				else {
+					sec--;
+					usec = 1000000 - tc->last.tv_usec + now.tv_usec;
+				}
+				
+                n = snprintf(d, left, "+%4.4d.%3.3d", sec, usec % 1000);
+			}
 			OVERFLOW_CHECK(n, left);
 			d += n;
 			left -= n;
@@ -1590,7 +1598,7 @@ default_init(void)
 	/* make purely flag-based, enable, and set a very simple header */
 	trace_add_simple_filter(&__dc, TRACE_FILTER_ALL_TAGS);
 	trace_enable(&__dc);
-	trace_set_header(&__dc, "[%C]");
+	trace_set_header(&__dc, "[%d %C]");
 
 }
 
