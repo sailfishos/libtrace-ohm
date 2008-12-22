@@ -870,7 +870,7 @@ format_message(context_t *ctx, int id,
     
 #define TIMEVAL_DIFF(diff, now, prev) do {                        \
         diff.tv_sec = now.tv_sec - prev.tv_sec;                   \
-        if (now.tv_usec > prev.tv_usec)                           \
+        if (now.tv_usec >= prev.tv_usec)                          \
             diff.tv_usec = now.tv_usec - prev.tv_usec;            \
         else {                                                    \
             diff.tv_sec--;                                        \
