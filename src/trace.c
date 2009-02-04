@@ -810,9 +810,6 @@ format_header(trace_context_t *tc, char *buf, size_t size,
 			continue;
 		}
 
-		if (left <= 0)
-			goto overflow;
-
 		s++;
 		
 		switch (*s) {
@@ -1347,7 +1344,7 @@ trace_del_simple_filter(trace_context_t *tc, char *filter_descr)
 		f = list_entry(p, trace_simple_filter_t, hook);
 		if (simple_identical(filter, f)) {
 			list_delete(&f->hook);
-			simple_free(tc, filter);
+			simple_free(tc, f);
 			status = 0;
 			/*
 			 * we don't check for duplicates yet when we add filters, so
@@ -1480,7 +1477,7 @@ trace_del_regexp_filter(trace_context_t *tc, char *filter_descr)
 		f = list_entry(p, trace_regexp_filter_t, hook);
 		if (regexp_identical(filter, f)) {
 			list_delete(&f->hook);
-			regexp_free(tc, filter);
+			regexp_free(tc, f);
 			status = 0;
 			/*
 			 * we don't check for duplicates yet when we add filters, so
@@ -1583,8 +1580,8 @@ default_init(void)
 	/* determine application name, defaulting to unknown */
 	memset(bin_path, 0, sizeof(bin_path));
 	sprintf(link_path, "/proc/%d/exe", getpid());
-	readlink(link_path, bin_path, sizeof(bin_path) - 1);
-	if (bin_path[0]) {
+	if (readlink(link_path, bin_path, sizeof(bin_path) - 1) > 0) {
+		bin_path[sizeof(bin_path) - 1] = '\0';
 		if ((bin_name = strrchr(bin_path, '/')) == NULL)
 			bin_name = bin_path;
 		else
