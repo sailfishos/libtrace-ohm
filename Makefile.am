@@ -1,7 +1,7 @@
-SUBDIRS        = src include doc rewrite rewrite/tests
+SUBDIRS        = rewrite rewrite/tests
 
-pkgconfigdir   = ${libdir}/pkgconfig
-pkgconfig_DATA = src/libtrace.pc
+#pkgconfigdir   = ${libdir}/pkgconfig
+#pkgconfig_DATA = src/libtrace.pc
 
 MAINTAINTERCLEANFILES = Makefile.in
 
