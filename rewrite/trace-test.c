@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
         fatal(1, "failed to add trace module test (%d: %s)",
               errno, strerror(errno));
             
-    info("registered trace module test registered...");
+    info("registered trace module test...");
             
     info("got debug flags:");
     info("graph: 0x%x, var: 0x%x, res: 0x%x, act: 0x%x, vm: 0x%x",

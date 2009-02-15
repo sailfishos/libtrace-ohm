@@ -18,7 +18,6 @@
 #define STAMP_UNKNOWN   "???? ??? ?? ??:??:??"
 
 
-#define BITS_PER_INT   ((int)sizeof(int) * 8)
 #define BITS_PER_LONG  ((int)sizeof(unsigned long) * 8)
 #define BYTES_PER_LONG ((int)sizeof(unsigned long))
 
@@ -58,7 +57,7 @@ typedef struct {
     char *name;                              /* symbolic flag name */
     char *descr;                             /* description of flag */
     int   bit;                               /* allocated bit in module */
-    int  *flagptr;                           /* reported to trace 'client' */
+    int  *flagptr;                           /* 'client' pointer to update */
 } flag_t;
 
 
@@ -219,10 +218,10 @@ trace_exit(void)
 
 
 /********************
- * trace_context_add
+ * trace_context_open
  ********************/
 int
-trace_context_add(const char *name)
+trace_context_open(const char *name)
 {
     context_t *ctx, *deleted;
 
@@ -265,10 +264,10 @@ trace_context_add(const char *name)
 
 
 /********************
- * trace_context_del
+ * trace_context_close
  ********************/
 int
-trace_context_del(int cid)
+trace_context_close(int cid)
 {
     context_t *ctx = CONTEXT_LOOKUP(cid);
     
@@ -513,11 +512,11 @@ trace_flag_tst(int id)
 
 
 /********************
- * __trace_write
+ * __trace_printf
  ********************/
 void
-__trace_write(int id, const char *file, int line, const char *func,
-              const char *format, ...)
+__trace_printf(int id, const char *file, int line, const char *func,
+               const char *format, ...)
 {
     int              cid = FLAG_CTX(id);
     context_t *ctx = CONTEXT_LOOKUP(cid);

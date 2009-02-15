@@ -86,7 +86,7 @@ typedef struct {
  */
 
 #define trace_write(id, format, args...)        \
-    __trace_write(id, __FILE__, __LINE__, __FUNCTION__, format"\n", ## args)
+    __trace_printf(id, __FILE__, __LINE__, __FUNCTION__, format"\n", ## args)
 
 
 
@@ -97,8 +97,8 @@ typedef struct {
 int  trace_init(void);
 void trace_exit(void);
 
-int  trace_context_add(const char *name);
-int  trace_context_del(int cid);
+int  trace_context_open(const char *name);
+int  trace_context_close(int cid);
 int  trace_context_format(int cid, const char *format);
 int  trace_context_target(int cid, const char *target);
 int  trace_context_enable(int cid);
