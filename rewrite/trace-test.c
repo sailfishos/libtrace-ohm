@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     
     trace_init();
 
-    if ((ctx = trace_context_add("test")) < 0)
+    if ((ctx = trace_context_open("test")) < 0)
         fatal(1, "failed to create test trace context");
   
     if (trace_module_add(ctx, &test) != 0)

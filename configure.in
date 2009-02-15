@@ -42,10 +42,20 @@ AC_FUNC_STRFTIME
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gettimeofday memset regcomp strdup])
 
+# Check for Check (unit test framework).
+PKG_CHECK_MODULES(CHECK, 
+                  check >= 0.9.4,
+                  [has_check="yes"], [has_check="no"])
+AM_CONDITIONAL(HAVE_CHECK, test "x$has_check" = "xyes")
+if test "x$has_check" = "xno"; then
+  AC_MSG_WARN([Check framework not found, unit tests are DISABLED.])
+fi
+
 AC_CONFIG_FILES([Makefile
                 src/Makefile
                 src/libtrace.pc
                 include/Makefile
                 doc/Makefile
-		rewrite/Makefile])
+		rewrite/Makefile
+		rewrite/tests/Makefile])
 AC_OUTPUT

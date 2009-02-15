@@ -13,5 +13,5 @@ check_libtrace_SOURCES = check-libtrace.c \
 			 check-libtrace-format.c
 check_libtrace_CFLAGS  = -I$(top_builddir)/rewrite \
 			  @CHECK_CFLAGS@
-check_libtrace_LDADD   = ../rewrite/libtrace.la \
+check_libtrace_LDADD   = ../libtrace.la \
 			  @CHECK_LIBS@
