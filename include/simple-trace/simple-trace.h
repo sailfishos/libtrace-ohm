@@ -104,8 +104,8 @@ int  trace_context_target(int cid, const char *target);
 int  trace_context_enable(int cid);
 int  trace_context_disable(int cid);
 
-int  trace_module_add(int cid, trace_moduledef_t *module);
-int  trace_module_del(int cid, const char *name);
+int  trace_add_module(int cid, trace_moduledef_t *module);
+int  trace_del_module(int cid, const char *name);
 
 int  trace_flag_set(int id);
 int  trace_flag_clr(int id);

@@ -229,10 +229,8 @@ trace_context_open(const char *name)
         return ctx->id;
 
     if (deleted == NULL) {
-        if (ncontext >= MAX_CONTEXTS) {
-            errno = ENOSPC;
-            return -1;
-        }
+        if (ncontext >= MAX_CONTEXTS)
+            return -ENOSPC;
         if (REALLOC_ARR(contexts, ncontext, ncontext + 1) == NULL)
             goto nomem;
         ctx = contexts + ncontext;
@@ -252,14 +250,12 @@ trace_context_open(const char *name)
 
     return ctx->id;
     
-    
  nomem:
     if (ctx) {
         FREE(ctx->name);
         FREE(ctx->modules);
     }
-    errno = ENOMEM;
-    return -1;
+    return -ENOMEM;
 }
 
 
@@ -271,11 +267,9 @@ trace_context_close(int cid)
 {
     context_t *ctx = CONTEXT_LOOKUP(cid);
     
-    if (ctx == NULL) {
-        errno = ENOENT;
-        return -1;
-    }
-
+    if (ctx == NULL)
+        return -ENOENT;
+    
     context_del(ctx);
     if (cid == ncontext - 1) {
         if (ncontext > 1)
@@ -599,10 +593,10 @@ context_find(const char *name, context_t **deleted)
 
 
 /********************
- * trace_module_add
+ * trace_add_module
  ********************/
 int
-trace_module_add(int cid, trace_moduledef_t *moddef)
+trace_add_module(int cid, trace_moduledef_t *moddef)
 {
     context_t       *ctx = CONTEXT_LOOKUP(cid);
     trace_flagdef_t *flagdef;
@@ -694,10 +688,10 @@ trace_module_add(int cid, trace_moduledef_t *moddef)
 
 
 /********************
- * trace_module_del
+ * trace_del_module
  ********************/
 int
-trace_module_del(int cid, const char *name)
+trace_del_module(int cid, const char *name)
 {
     context_t *ctx;
     module_t  *module;

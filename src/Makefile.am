@@ -1,5 +1,5 @@
 lib_LTLIBRARIES = libtrace.la
-bin_PROGRAMS    = trace-test
+#bin_PROGRAMS    = trace-test
 
 libtrace_la_SOURCES = simple-trace.c
 libtrace_la_CFLAGS  = -Wall -Wextra
