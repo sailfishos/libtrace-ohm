@@ -3,7 +3,7 @@
 #include <string.h>
 #include <errno.h>
 
-#include "simple-trace.h"
+#include <simple-trace/simple-trace.h>
 
 #define fatal(ec, fmt, args...) do {                            \
         fprintf(stderr, "[ERROR] "fmt"\n", ## args);            \

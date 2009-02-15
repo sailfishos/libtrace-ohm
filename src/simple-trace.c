@@ -7,7 +7,7 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "simple-trace.h"
+#include <simple-trace/simple-trace.h>
 #include "mm.h"
 
 

@@ -113,8 +113,8 @@ int  trace_flag_tst(int id);
 
 int  trace_configure(const char *config);
 
-void __trace_write(int id, const char *file, int line, const char *func,
-                   const char *format, ...);
+void __trace_printf(int id, const char *file, int line, const char *func,
+                    const char *format, ...);
 
 
 #endif /* __SIMPLE_TRACE_H__ */

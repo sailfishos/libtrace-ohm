@@ -1,7 +1,7 @@
 SUBDIRS        = src tests
 
-#pkgconfigdir   = ${libdir}/pkgconfig
-#pkgconfig_DATA = src/libtrace.pc
+pkgconfigdir   = ${libdir}/pkgconfig
+pkgconfig_DATA = src/libtrace.pc
 
 MAINTAINTERCLEANFILES = Makefile.in
 
