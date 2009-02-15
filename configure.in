@@ -3,9 +3,9 @@
 
 AC_PREREQ(2.59)
 AC_INIT(libtrace, 0.1)
-AC_CONFIG_SRCDIR([rewrite/simple-trace.c])
+AC_CONFIG_SRCDIR([src/simple-trace.c])
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
-AC_CONFIG_HEADER([rewrite/config.h])
+AC_CONFIG_HEADER([src/config.h])
 
 # libtool
 LT_CURRENT=2
@@ -52,6 +52,6 @@ if test "x$has_check" = "xno"; then
 fi
 
 AC_CONFIG_FILES([Makefile
-		rewrite/Makefile
-		rewrite/tests/Makefile])
+		src/Makefile
+		src/tests/Makefile])
 AC_OUTPUT

@@ -1,4 +1,4 @@
-SUBDIRS        = rewrite rewrite/tests
+SUBDIRS        = src src/tests
 
 #pkgconfigdir   = ${libdir}/pkgconfig
 #pkgconfig_DATA = src/libtrace.pc
