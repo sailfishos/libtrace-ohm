@@ -1,0 +1,85 @@
+.TH TRACE 3 2009-02-15 "TRACE" "Simple Trace Library Manual"
+.SH NAME
+trace_init, trace_exit, trace_open, trace_close, trace_set_destination, trace_set_header, trace_add_component, trace_del_component, trace_write, trace_enable, trace_disable, trace_on, trace_off, trace_parse_flags, trace_list_flags, trace_reset_filters, trace_add_simple_filter, trace_del_simple_filter - produce filterable trace messages
+.br
+.SH INTRODUCTION
+
+.SH SYNOPSIS
+.B #include <simple-trace/simple-.h>
+.sp
+.BI "int trace_init(void);"
+.br
+.BI "void trace_exit(void);"
+.br
+.BI "int trace_context_open(char *name);"
+.br
+.BI "void trace_context_close(int cid);"
+.br
+.BI "int trace_context_format(int cid, const char *format);"
+.br
+.BI "int trace_context_target(int cid, const char *target);"
+.br
+.BI "int trace_context_enable(int cid);"
+.br
+.BI "int trace_context_disable(int cid);"
+.br
+.BI "int trace_module_add(int cid, trace_moduledef_t *module);"
+.br
+.BI "int trace_module_del(int cid, const char *name);"
+.br
+.BI "int trace_flag_set(int fid);"
+.br
+.BI "int trace_flag_clr(int fid);"
+.br
+.BI "int trace_flag_tst(int fid);"
+.br
+.BI "int trace_configure(const char *config);"
+.br
+.BI "void __trace_printf(int id, const char *file, int line, const char *func,"
+.BI "const char *format, ...);"
+.br
+.BI "#define trace_printf(int id, format, args...)"
+
+.SH "DESCRIPTION"
+.BR trace_init ()
+is used to initialise the trace library. It must be invoked once prior to
+calling any other functions of the trace library.
+.BR trace_exit ()
+can be used to deinitialize the library. It frees any potential resources
+consumed by the library. Once the trace library is deinitialized, no other
+functions should be called until it is reinitialized with
+.BR trace_init ()
+again.
+
+Typically, applications invoke
+.BR trace_init ()
+during their startup/initialization phase. Similarly they invoke
+.BR trace_exit ()
+to clean up during their shutdown/deinitialization phase, usually right
+before
+.BR exit(3)
+ing.
+
+.SH "MESSAGE FORMATTING"
+
+.SH "REDIRECTING TRACE MESSAGES"
+
+.SH "RUNTIME CONFIGURATION"
+
+Low-level configuration interface
+
+High-level configuration interface
+
+
+.BR trace_configure ()
+parses a configuration
+.I request
+string to change the set of active trace flags and applies the requested
+changes.
+
+.SH "BUGS"
+
+Please, report any other bugs.
+
+.SH "SEE ALSO"
+.BR printf(3)
