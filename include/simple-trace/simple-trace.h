@@ -87,6 +87,9 @@ typedef struct {
 
 #define trace_write(id, format, args...)        \
     __trace_printf(id, __FILE__, __LINE__, __FUNCTION__, format"\n", ## args)
+#define trace_printf(id, format, args...)        \
+    __trace_printf(id, __FILE__, __LINE__, __FUNCTION__, format"\n", ## args)
+
 
 
 
@@ -113,7 +116,7 @@ int  trace_flag_tst(int id);
 
 int  trace_configure(const char *config);
 
-void __trace_printf(int id, const char *file, int line, const char *func,
+int  __trace_printf(int id, const char *file, int line, const char *func,
                     const char *format, ...);
 
 

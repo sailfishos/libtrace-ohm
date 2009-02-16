@@ -23,6 +23,7 @@ START_TEST(missing_open)
 }
 END_TEST
 
+
 START_TEST(multiple_open)
 {
     int cid;
@@ -32,11 +33,13 @@ START_TEST(multiple_open)
 }
 END_TEST
 
+
 START_TEST(spurious_close)
 {
     fail_unless(trace_context_close(3) < 0);
 }
 END_TEST
+
 
 START_TEST(normal_open_close)
 {
@@ -58,12 +61,13 @@ START_TEST(multiple_close)
 }
 END_TEST
 
+
 void
 chktrace_context_tests(Suite *suite)
 {
     TCase *tc;
 
-    tc = tcase_create("context creation/cleanup");
+    tc = tcase_create("trace contexts");
     tcase_add_test(tc, missing_open);
     tcase_add_test(tc, multiple_open);
     tcase_add_test(tc, normal_open_close);

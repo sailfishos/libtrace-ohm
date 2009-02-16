@@ -5,14 +5,15 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include <locale.h>
 #include <sys/time.h>
 
 #include <simple-trace/simple-trace.h>
 #include "mm.h"
 
 
-#define STAMP_FORMAT    "%Y-%m-%d %H:%M:%S"
-#define STAMP_STRFLEN   (4+1+2+1+2+1+2+1+2+1+2)  /* YYYY-MMM-DD hh:mm:ss */
+#define STAMP_FORMAT    "%Y-%b-%d %H:%M:%S"
+#define STAMP_STRFLEN   (4+1+3+1+2+1+2+1+2+1+2)  /* YYYY-MMM-DD hh:mm:ss */
 #define STAMP_MSECLEN   (1+3)                    /*                     .mmm */
 #define STAMP_SIZE      (STAMP_STRFLEN + STAMP_MSECLEN + 1)
 #define STAMP_UNKNOWN   "???? ??? ?? ??:??:??"
@@ -274,8 +275,10 @@ trace_context_close(int cid)
     if (cid == ncontext - 1) {
         if (ncontext > 1)
             REALLOC_ARR(contexts, ncontext, ncontext - 1);
-        else
+        else {
             FREE(contexts);
+            contexts = NULL;
+        }
         ncontext--;
     }
     
@@ -291,11 +294,9 @@ trace_context_enable(int cid)
 {
     context_t *ctx = CONTEXT_LOOKUP(cid);
 
-    if (ctx == NULL) {
-        errno = ENOMEM;
-        return -1;
-    }
-
+    if (ctx == NULL)
+        return -ENOENT;
+    
     ctx->disabled = FALSE;
     return 0;
 }
@@ -309,10 +310,8 @@ trace_context_disable(int cid)
 {
     context_t *ctx = CONTEXT_LOOKUP(cid);
 
-    if (ctx == NULL) {
-        errno = ENOMEM;
-        return -1;
-    }
+    if (ctx == NULL)
+        return -ENOENT;
 
     ctx->disabled = TRUE;
     return 0;
@@ -336,7 +335,7 @@ context_target(context_t *ctx, const char *target)
     else                                nfp = fopen(target, "a");
     
     if (nfp == NULL)
-        return -1;
+        return -errno;
     
     if (ofp != NULL && ofp != stderr && ofp != stdout)
         fclose(ofp);
@@ -356,10 +355,8 @@ trace_context_target(int cid, const char *target)
 
     if (ctx != NULL)
         return context_target(ctx, target);
-    else {
-        errno = ENOENT;
-        return -1;
-    }
+    else
+        return -ENOENT;
 }
 
 
@@ -369,18 +366,19 @@ trace_context_target(int cid, const char *target)
 int
 context_format(context_t *ctx, const char *format)
 {
-    if (check_format(format) < 0)
-        return -1;
+    int err;
+    
+    if ((err = check_format(format)) < 0)
+        return err;
     else {
         if (ctx->format != default_format)
             FREE(ctx->format);
         if ((ctx->format = STRDUP(format)) == NULL) {
-            errno = ENOMEM;
             ctx->format = default_format;
-            return -1;
+            return -ENOMEM;
         }
     }
-
+    
     return 0;
 }
 
@@ -395,10 +393,8 @@ trace_context_format(int cid, const char *format)
     
     if (ctx != NULL)
         return context_format(ctx, format);
-    else {
-        errno = ENOENT;
-        return -1;
-    }
+    else
+        return -ENOENT;
 }
 
 
@@ -422,15 +418,11 @@ trace_flag_set(int id)
     mod = MODULE_LOOKUP(ctx, m);
     flg = FLAG_LOOKUP(mod, i);
 
-    if (unlikely(flg == NULL)) {
-        errno = ENOENT;
-        return -1;
-    }
+    if (unlikely(flg == NULL))
+        return -ENOENT;
 
-    if (unlikely(flg->bit != b)) {
-        errno = EINVAL;
-        return -1;
-    }
+    if (unlikely(flg->bit != b))
+        return -EINVAL;
     
     return set_bit(&ctx->mask, flg->bit);
 }
@@ -456,17 +448,12 @@ trace_flag_clr(int id)
     mod = MODULE_LOOKUP(ctx, m);
     flg = FLAG_LOOKUP(mod, i);
 
-    if (unlikely(flg == NULL)) {
-        errno = ENOENT;
-        return -1;
-    }
+    if (unlikely(flg == NULL))
+        return -ENOENT;
     
-    if (unlikely(flg->bit != b)) {
-        errno = EINVAL;
-        return -1;
-    }
-        
-
+    if (unlikely(flg->bit != b))
+        return -EINVAL;
+    
     return clr_bit(&ctx->mask, flg->bit);
 }
 
@@ -491,16 +478,12 @@ trace_flag_tst(int id)
     mod = MODULE_LOOKUP(ctx, m);
     flg = FLAG_LOOKUP(mod, i);
 
-    if (unlikely(flg == NULL)) {
-        errno = ENOENT;
-        return 0;
-    }
+    if (unlikely(flg == NULL))
+        return -ENOENT;
+
+    if (unlikely(flg->bit != b))
+        return - EINVAL;
     
-    if (unlikely(flg->bit != b)) {
-        errno = EINVAL;
-        return 0;
-    }
-        
     return tst_bit(&ctx->mask, flg->bit);
 }
 
@@ -508,26 +491,31 @@ trace_flag_tst(int id)
 /********************
  * __trace_printf
  ********************/
-void
+int
 __trace_printf(int id, const char *file, int line, const char *func,
                const char *format, ...)
 {
-    int              cid = FLAG_CTX(id);
+    int        cid = FLAG_CTX(id);
     context_t *ctx = CONTEXT_LOOKUP(cid);
-    va_list          ap;
-    char             buf[4096];
-    int              n;
+    va_list    ap;
+    char       buf[4096];
+    int        n;
     
-    if (ctx == NULL || ctx->disabled || !trace_flag_tst(id))
-        return;
+    if (ctx == NULL)
+        return -ENOENT;
+    
+    if (ctx->disabled || !trace_flag_tst(id))
+        return 0;
     
     va_start(ap, format);
     n = format_message(ctx, id, file, line, func, buf, sizeof(buf), format, ap);
     va_end(ap);
-    if (n <= 0)
-        return;
+    if (n < 0)
+        return n;
     fflush(ctx->destination);
-    write(fileno(ctx->destination), buf, n - 1);
+    n = write(fileno(ctx->destination), buf, n - 1);
+
+    return n;
 }
 
 
@@ -546,10 +534,10 @@ context_del(context_t *ctx)
         FREE(ctx->format);
     ctx->format = NULL;
     
-    if (ctx->destination != (FILE *)TRACE_TO_STDERR &&
-        ctx->destination != (FILE *)TRACE_TO_STDOUT) {
+    if (ctx->destination != stderr && ctx->destination != stdout) {
         fflush(ctx->destination);
         fclose(ctx->destination);
+        ctx->destination = NULL;
     }
     
     for (i = 0; i < ctx->nmodule; i++)
@@ -587,7 +575,6 @@ context_find(const char *name, context_t **deleted)
             return ctx;
     }
 
-    errno = ENOENT;
     return NULL;
 }
 
@@ -605,22 +592,18 @@ trace_add_module(int cid, trace_moduledef_t *moddef)
     int              i, nflag, n;
 
     
-    if (ctx == NULL) {
-        errno = ENOENT;
-        return -1;
-    }
+    if (ctx == NULL)
+        return -ENOENT;
 
     if (moddef->name == NULL) {
         WARNING("Module with NULL name for context %s.", ctx->name);
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
     
     if (module_find(ctx, moddef->name, &deleted) != NULL) {
         WARNING("Context %s already has a module %s.", ctx->name,
                       moddef->name);
-        errno = EEXIST;
-        return -1;
+        return -EEXIST;
     }
 
     nflag = 0;
@@ -630,18 +613,15 @@ trace_add_module(int cid, trace_moduledef_t *moddef)
                 continue;
             WARNING("#%d flag of %s.%s is invalid.", i + 1, ctx->name,
                           moddef->name);
-            errno = EINVAL;
-            return -1;
+            return -EINVAL;
         }
         nflag++;
     }
 
     if (deleted == NULL) {
         n = ctx->nmodule;
-        if (REALLOC_ARR(ctx->modules, n, n + 1) == NULL) {
-            errno = ENOMEM;
-            return -1;
-        }
+        if (REALLOC_ARR(ctx->modules, n, n + 1) == NULL)
+            return -ENOMEM;
         
         mod = ctx->modules + ctx->nmodule;
         mod->id = ctx->nmodule++;
@@ -649,15 +629,11 @@ trace_add_module(int cid, trace_moduledef_t *moddef)
     else
         mod = deleted;
     
-    if ((mod->name = STRDUP(moddef->name)) == NULL) {
-        errno = ENOMEM;
-        return -1;
-    }
+    if ((mod->name = STRDUP(moddef->name)) == NULL)
+        return - ENOMEM;
     
-    if ((mod->flags = ALLOC_ARR(typeof(*mod->flags), nflag)) == NULL) {
-        errno = ENOMEM;
-        return -1;
-    }
+    if ((mod->flags = ALLOC_ARR(typeof(*mod->flags), nflag)) == NULL)
+        return -ENOMEM;
     
     mod->nflag = nflag;
 
@@ -669,14 +645,12 @@ trace_add_module(int cid, trace_moduledef_t *moddef)
             (flag->descr = STRDUP(flagdef->descr)) == NULL ||
             (flag->bit   = alloc_flag(ctx)) < 0) {
             module_free(ctx, mod);
-            errno = ENOMEM;
-            return -1;
+            return -ENOMEM;
         }
         
         if (flag->bit >= MAX_FLAGS) {
             module_free(ctx, mod);
-            errno = EOVERFLOW;
-            return -1;
+            return -EOVERFLOW;
         }
         
         *flagdef->flagptr = FLAG_ID(ctx->id, mod->id, i, flag->bit);
@@ -696,25 +670,23 @@ trace_del_module(int cid, const char *name)
     context_t *ctx;
     module_t  *module;
 
-    if (name == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    if ((ctx = CONTEXT_LOOKUP(cid)) == NULL) {
-        errno = ENOENT;
-        return -1;
-    }
+    if (name == NULL)
+        return -EINVAL;
+    
+    if ((ctx = CONTEXT_LOOKUP(cid)) == NULL)
+        return -ENOENT;
     
     if ((module = module_find(ctx, name, NULL)) == NULL)
-        return -1;
+        return -ENOENT;
     
     module_free(ctx, module);
     if (module->id == ctx->nmodule - 1) {
         if (ctx->nmodule > 1)
             REALLOC_ARR(ctx->modules, ctx->nmodule, ctx->nmodule - 1);
-        else
+        else {
             FREE(ctx->modules);
+            ctx->modules = NULL;
+        }
         ctx->nmodule--;
     }
     
@@ -744,7 +716,6 @@ module_find(context_t *ctx, const char *name, module_t **deleted)
             return m;
     }
     
-    errno = ENOENT;
     return NULL;
 }
  
@@ -800,7 +771,6 @@ flag_find(module_t *module, const char *name, flag_t **deleted)
             return f;
     }
     
-    errno = ENOENT;
     return NULL;
 }
 
@@ -818,7 +788,7 @@ get_timestamp(char *buf, struct timeval *tv)
     struct tm  tm;
     time_t     now;
     int        ms;
-    char      *d;
+    char      *d, *lc_time;
 
     /* must have buffer of TIMESTAMP_SIZE or more bytes */
     
@@ -834,6 +804,9 @@ get_timestamp(char *buf, struct timeval *tv)
         return buf;
     }
     
+    lc_time = setlocale(LC_TIME, NULL);
+    setlocale(LC_TIME, "C");
+
     d = buf;
     strftime(d, STAMP_SIZE, STAMP_FORMAT, &tm);
     d += STAMP_STRFLEN;
@@ -843,8 +816,11 @@ get_timestamp(char *buf, struct timeval *tv)
     d[2] = '0' + ms /  10; ms %=  10;
     d[3] = '0' + ms;
     d[4] = '\0';
-    
+
+    setlocale(LC_TIME, lc_time);
+        
     return buf;
+
 }
 
 
@@ -1029,8 +1005,7 @@ format_message(context_t *ctx, int id,
     else {
         *d = '\0';
     }
-    errno = EOVERFLOW;
-    return -1;
+    return -EOVERFLOW;
 }
 
 
@@ -1043,11 +1018,9 @@ check_format(const char *format)
 {
     const char *s = format;
 
-    if (format == NULL || !*format) {
-        errno = EILSEQ;
-        return -1;
-    }
-    
+    if (format == NULL || !*format)
+        return -EILSEQ;
+
     while (*s) {
         if (*s != '%') {
             s++;
@@ -1071,8 +1044,7 @@ check_format(const char *format)
         default:
             ERROR("Invalid format format string \"%s\".", format);
             ERROR("Illegal part detected at \"%s\".", s);
-            errno = EILSEQ;
-            return -1;
+            return -EILSEQ;
         }
         
         s++;
@@ -1149,10 +1121,8 @@ set_bit(bitmap_t *bits, int i)
     
         return 0;
     }
-    else {
-        errno = EOVERFLOW;
-        return -1;
-    }
+    else
+        return -EOVERFLOW;
 }
 
 
@@ -1173,10 +1143,8 @@ clr_bit(bitmap_t *bits, int i)
         *wptr &= ~(0x1 << (i & (BITS_PER_LONG - 1)));
         return 0;
     }
-    else {
-        errno = EOVERFLOW;
-        return -1;
-    }
+    else
+        return -EOVERFLOW;
 }
 
 
@@ -1228,18 +1196,14 @@ realloc_bits(bitmap_t *bits, int n)
         
     if (n > bits->nbit) {                               /* grow */
         if (oldn == 1) {
-            if ((wptr = ALLOC_ARR(typeof(*wptr), newn)) == NULL) {
-                errno = ENOMEM;
-                return -1;
-            }
+            if ((wptr = ALLOC_ARR(typeof(*wptr), newn)) == NULL)
+                return -ENOMEM;
             *wptr = bits->bits.word;
             bits->bits.wptr = wptr;
         }
         else {
-            if (REALLOC_ARR(bits->bits.wptr, oldn, newn) == NULL) {
-                errno = ENOMEM;
-                return -1;
-            }
+            if (REALLOC_ARR(bits->bits.wptr, oldn, newn) == NULL)
+                return -ENOMEM;
         }
     }
     else {                                            /* shrink */
@@ -1249,10 +1213,8 @@ realloc_bits(bitmap_t *bits, int n)
             FREE(wptr);
         }
         else {
-            if (REALLOC_ARR(bits->bits.wptr, oldn, newn) == NULL) {
-                errno = ENOMEM;
-                return -1;
-            }
+            if (REALLOC_ARR(bits->bits.wptr, oldn, newn) == NULL)
+                return -ENOMEM;
         }
     }
     
@@ -1350,8 +1312,7 @@ flip_flag(char *context, char *module, char *flag)
     else {
         if ((cptr = context_find(context, NULL)) == NULL) {
             ERROR("Context \"%s\" does not exist.", context);
-            errno = ENOENT;
-            return -1;
+            return -ENOENT;
         }
         nctx = 1;
     }
@@ -1367,9 +1328,8 @@ flip_flag(char *context, char *module, char *flag)
         }
         else {
             if ((mptr = module_find(cptr, module, NULL)) == NULL) {
-                ERROR("Module %s.%s does not exist.", context, module);
-                errno = ENOENT;
-                return -1;
+                ERROR("Module \"%s.%s\" does not exist.", context, module);
+                return - ENOENT;
             }
             nmod = 1;
         }
@@ -1387,10 +1347,9 @@ flip_flag(char *context, char *module, char *flag)
             }
             else {
                 if ((fptr = flag_find(mptr, flag, NULL)) == NULL) {
-                    ERROR("Flag %s.%s.%s does not exist.", context,
+                    ERROR("Flag \"%s.%s.%s\" does not exist.", context,
                           module, flag);
-                    errno = ENOENT;
-                    return -1;
+                    return -ENOENT;
                 }
                 nflg = 1;
             }
@@ -1438,8 +1397,7 @@ context_command(char *context, char *command, char *args)
     else {
         if ((cptr = context_find(context, NULL)) == NULL) {
             ERROR("Context '%s' does not exist.", context);
-            errno = ENOENT;
-            return -1;
+            return -ENOENT;
         }
         nctx = 1;
     }
@@ -1464,8 +1422,7 @@ context_command(char *context, char *command, char *args)
     if (!strcmp(command, TARGET) || !strcmp(command, REDIR)) {
         if (args != NULL && !args) {
             ERROR("Command target requires a path argument.");
-            errno = EILSEQ;
-            return -1;
+            return -EILSEQ;
         }
 
         for (status = 0; nctx > 0; cptr++, nctx--) {
@@ -1473,7 +1430,7 @@ context_command(char *context, char *command, char *args)
                 continue;
             if (context_target(cptr, args) != 0) {
                 ERROR("Failed to redirect '%s' to '%s'.", cptr->name, args);
-                status = -1;
+                status = -EIO;
             }
             else
                 INFO("'%s' redirected to '%s'.", cptr->name, args);
@@ -1489,8 +1446,7 @@ context_command(char *context, char *command, char *args)
         if ((len = strlen(args)) >= sizeof(arg) - 1) {
             ERROR("Format string '%s' too long for context '%s'.", args,
                   context);
-            errno = EILSEQ;
-            return -1;
+            return -EILSEQ;
         }
 
         if (len > 2 && ((args[0] == '\'' && args[len-1] == '\'') ||
@@ -1507,7 +1463,7 @@ context_command(char *context, char *command, char *args)
                 continue;
             if (context_format(cptr, format) != 0) {
                 ERROR("Failed to set format %s for '%s'.", args, cptr->name);
-                status = -1;
+                status = -EINVAL;
             }
             else
                 INFO("Format for '%s' is now '%s'.", cptr->name, format);
@@ -1518,8 +1474,7 @@ context_command(char *context, char *command, char *args)
 
 
     ERROR("Unkown command '%s' for context '%s'.", command, context);
-    errno = EILSEQ;
-    return -1;
+    return -EILSEQ;
 }
 
 
@@ -1617,7 +1572,6 @@ context_configure(char *context, const char *config)
 
  invalid_input:
     ERROR("Invalid command '%s' for context '%s'.", config, context);
-    errno = EILSEQ;
     return NULL;
 
 }
@@ -1635,10 +1589,8 @@ trace_configure(const char *config)
     int         l;
     
     
-    if (config == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
+    if (config == NULL)
+        return -EINVAL;
     
     s = config;
 
