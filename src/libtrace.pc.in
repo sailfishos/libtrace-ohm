@@ -1,0 +1,13 @@
+# trace library pkg-config file
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: trace
+Description: A simple trace library.
+Version: 0.0.0
+Requires:
+Conflicts:
+Libs: -L${libdir} -lsimple-trace
+Cflags: -I${includedir}

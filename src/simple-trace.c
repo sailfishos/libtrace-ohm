@@ -101,14 +101,18 @@ typedef struct {
 } context_t;
 
 
-#define CONTEXT_LOOKUP(cid) ({                          \
-            context_t *_ctx;                            \
-            if (unlikely(cid < 0 || cid >= ncontext))   \
-                _ctx = NULL;                            \
-            else                                        \
-                _ctx = contexts[cid].name ?             \
-                    contexts + (cid) : NULL;            \
-            _ctx;})
+#define CONTEXT_LOOKUP(cid) ({                                  \
+        context_t *_ctx;                                        \
+        if (cid == TRACE_DEFAULT_CONTEXT)                       \
+            _ctx = get_default_context();                       \
+        else {                                                  \
+            if (unlikely(cid < 0 || cid >= ncontext))           \
+                _ctx = NULL;                                    \
+            else                                                \
+                _ctx = contexts[cid].name ?                     \
+                    contexts + (cid) : NULL;                    \
+        }                                                       \
+        _ctx;})
 
 #define MODULE_LOOKUP(ctx, id) ({                       \
             module_t *_m;                               \
@@ -155,11 +159,18 @@ typedef struct {
 
 static context_t *contexts;
 static int        ncontext;
-static char      *default_format = "[%C] ";
+static char      *default_format = TRACE_DEFAULT_FORMAT;
+
+static context_t default_context = {
+    .name = TRACE_DEFAULT_NAME,
+    .id   = TRACE_DEFAULT_CONTEXT,
+};
+
 
 
 static context_t *context_find(const char *name, context_t **deleted);
 static void       context_del (context_t *ctx);
+static context_t *get_default_context(void);
 
 static module_t *module_find(context_t *ctx, const char *name,
                              module_t **deleted);
@@ -226,6 +237,9 @@ trace_context_open(const char *name)
 {
     context_t *ctx, *deleted;
 
+    if (!strcmp(name, TRACE_DEFAULT_NAME))
+        return default_context.id;
+
     if ((ctx = context_find(name, &deleted)) != NULL)
         return ctx->id;
 
@@ -268,6 +282,9 @@ trace_context_close(int cid)
 {
     context_t *ctx = CONTEXT_LOOKUP(cid);
     
+    if (ctx == &default_context)
+        return 0;
+
     if (ctx == NULL)
         return -ENOENT;
     
@@ -576,6 +593,23 @@ context_find(const char *name, context_t **deleted)
     }
 
     return NULL;
+}
+
+
+/********************
+ * get_default_context
+ ********************/
+static context_t *
+get_default_context(void)
+{
+    if (default_context.format == NULL) {
+        default_context.format = STRDUP(default_format);
+        default_context.destination = stderr;
+        init_bits(&default_context.bits);
+        init_bits(&default_context.mask);
+    }
+    
+    return &default_context;
 }
 
 

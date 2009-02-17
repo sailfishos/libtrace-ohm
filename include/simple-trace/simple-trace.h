@@ -23,8 +23,9 @@
 #  define TRUE  1
 #endif
 
-
-
+#define TRACE_DEFAULT_CONTEXT 127
+#define TRACE_DEFAULT_NAME    "default"
+#define TRACE_DEFAULT_FORMAT  "[%C] "
 
 /*
  * a trace flag definition

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <check.h>
 #include <simple-trace/simple-trace.h>
@@ -54,6 +55,7 @@ chktrace_suite(void)
     chktrace_module_tests(suite);
     chktrace_flag_tests(suite);
     chktrace_format_tests(suite);
+    chktrace_default_tests(suite);
 #if 1
     chktrace_target_tests(suite);
 #endif
