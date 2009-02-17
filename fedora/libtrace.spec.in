@@ -46,17 +46,17 @@ make DESTDIR=$RPM_BUILD_ROOT install
 
 %files
 %defattr(-,root,root,-)
-%{_libdir}/libtrace*.so
-%{_libdir}/libtrace*.so.*
+%{_libdir}/libsimple-trace*.so
+%{_libdir}/libsimple-trace*.so.*
 
 %files devel
 %defattr(-,root,root,-)
-%{_includedir}/trace
-%{_libdir}/pkgconfig/libtrace*
+%{_includedir}/simple-trace
+%{_libdir}/pkgconfig/libsimple-trace*
 
 %files doc
 %defattr(-,root,root,-)
-%{_mandir}/man*/libtrace.*
+%{_mandir}/man*/libsimple-trace.*
 %{_docdir}/*
 
 %changelog
