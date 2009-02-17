@@ -1,10 +1,10 @@
-man_MANS   = libtrace.3
-docdir     = ${datadir}/doc/libtrace-doc
-doc_DATA   = libtrace.html
-DIST       = libtrace.html
+man_MANS   = @PACKAGE@.3
+docdir     = ${datadir}/doc/@PACKAGE@-doc
+doc_DATA   = @PACKAGE@.html
+DIST       = @PACKAGE@.html
 
 # HTML version of the manual pages
-libtrace.html: libtrace.3
+@PACKAGE@.html: @PACKAGE@.3
 	groff -mman -Thtml $< > $@ || \
 	echo "Failed to convert manual page to HTML. See man libtrace.3." > $@
 

@@ -14,5 +14,5 @@ check_libtrace_SOURCES = check-libtrace.c \
 			 check-libtrace-default.c
 check_libtrace_CFLAGS  = -I$(top_builddir)/include \
 			  @CHECK_CFLAGS@
-check_libtrace_LDADD   = ../src/libtrace.la \
+check_libtrace_LDADD   = ../src/libsimple-trace.la \
 			  @CHECK_LIBS@

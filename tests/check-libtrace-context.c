@@ -70,6 +70,7 @@ chktrace_context_tests(Suite *suite)
     tc = tcase_create("trace contexts");
     tcase_add_test(tc, missing_open);
     tcase_add_test(tc, multiple_open);
+    tcase_add_test(tc, spurious_close);
     tcase_add_test(tc, normal_open_close);
     tcase_add_test(tc, multiple_close);
     suite_add_tcase(suite, tc);

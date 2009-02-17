@@ -1,4 +1,4 @@
-usr/lib/libtrace.so
-usr/include/trace
-usr/lib/pkgconfig/libtrace.pc
-usr/share/man/man*/libtrace.*
+usr/lib/libsimple-trace.so
+usr/include/simple-trace
+usr/lib/pkgconfig/libsimple-trace.pc
+usr/share/man/man*/libsimple-trace.*

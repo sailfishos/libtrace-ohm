@@ -1,7 +1,7 @@
-SUBDIRS        = src doc tests
+SUBDIRS        = src include doc tests
 
 pkgconfigdir   = ${libdir}/pkgconfig
-pkgconfig_DATA = src/libtrace.pc
+pkgconfig_DATA = src/libsimple-trace.pc
 
 MAINTAINTERCLEANFILES = Makefile.in
 
