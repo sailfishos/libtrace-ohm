@@ -1,3 +1,9 @@
+libtrace (0.5.0) unstable; urgency=low
+
+  * Legal bug fix: rewrote from scratch.
+
+ -- K. Litkey <krisztian.litkey@nokia.com>  Wed, 18 Feb 2009 14:06:08 +0200
+
 libtrace (0.0.3) unstable; urgency=low
 
   * Don't install *.la files.
