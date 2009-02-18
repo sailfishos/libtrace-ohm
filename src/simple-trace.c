@@ -101,18 +101,13 @@ typedef struct {
 } context_t;
 
 
-#define CONTEXT_LOOKUP(cid) ({                                  \
-        context_t *_ctx;                                        \
-        if (cid == TRACE_DEFAULT_CONTEXT)                       \
-            _ctx = get_default_context();                       \
-        else {                                                  \
-            if (unlikely(cid < 0 || cid >= ncontext))           \
-                _ctx = NULL;                                    \
-            else                                                \
-                _ctx = contexts[cid].name ?                     \
-                    contexts + (cid) : NULL;                    \
-        }                                                       \
-        _ctx;})
+#define CONTEXT_LOOKUP(cid) ({                                          \
+            context_t *_ctx;                                            \
+            if (unlikely(cid < 0 || cid >= ncontext))                   \
+                _ctx = NULL;                                            \
+            else                                                        \
+                _ctx = contexts[cid].name ? contexts + (cid) : NULL;    \
+            _ctx;})
 
 #define MODULE_LOOKUP(ctx, id) ({                       \
             module_t *_m;                               \
@@ -159,18 +154,12 @@ typedef struct {
 
 static context_t *contexts;
 static int        ncontext;
+static int        initialized    = FALSE;
 static char      *default_format = TRACE_DEFAULT_FORMAT;
 
-static context_t default_context = {
-    .name = TRACE_DEFAULT_NAME,
-    .id   = TRACE_DEFAULT_CONTEXT,
-};
-
-
-
+static int        context_init(context_t *ctx, const char *name);
 static context_t *context_find(const char *name, context_t **deleted);
 static void       context_del (context_t *ctx);
-static context_t *get_default_context(void);
 
 static module_t *module_find(context_t *ctx, const char *name,
                              module_t **deleted);
@@ -201,10 +190,20 @@ static int format_message(context_t *ctx, int id,
 int
 trace_init(void)
 {
-    if (contexts != NULL)
+    int err;
+    
+    if (initialized)
         return 0;
 
-    ncontext = 0;
+    if ((contexts = ALLOC_ARR(context_t, 1)) == NULL)
+        return -ENOMEM;
+
+    if ((err = context_init(contexts, TRACE_DEFAULT_NAME)) < 0)
+        return err;
+    
+    ncontext    = 1;
+    initialized = TRUE;
+    
     return 0;
 }
 
@@ -237,8 +236,8 @@ trace_context_open(const char *name)
 {
     context_t *ctx, *deleted;
 
-    if (!strcmp(name, TRACE_DEFAULT_NAME))
-        return default_context.id;
+    if (!initialized)
+        trace_init();
 
     if ((ctx = context_find(name, &deleted)) != NULL)
         return ctx->id;
@@ -247,30 +246,13 @@ trace_context_open(const char *name)
         if (ncontext >= MAX_CONTEXTS)
             return -ENOSPC;
         if (REALLOC_ARR(contexts, ncontext, ncontext + 1) == NULL)
-            goto nomem;
+            return -ENOMEM;
         ctx = contexts + ncontext;
-        ctx->id = ncontext++;
     }
     else
         ctx = deleted;
-
-    if ((ctx->name = STRDUP(name)) == NULL)
-        goto nomem;
     
-    ctx->format      = default_format;
-    ctx->destination = stderr;
-
-    init_bits(&ctx->bits);
-    init_bits(&ctx->mask);
-
-    return ctx->id;
-    
- nomem:
-    if (ctx) {
-        FREE(ctx->name);
-        FREE(ctx->modules);
-    }
-    return -ENOMEM;
+    return context_init(ctx, name);
 }
 
 
@@ -282,7 +264,7 @@ trace_context_close(int cid)
 {
     context_t *ctx = CONTEXT_LOOKUP(cid);
     
-    if (ctx == &default_context)
+    if (ctx == contexts)
         return 0;
 
     if (ctx == NULL)
@@ -537,6 +519,27 @@ __trace_printf(int id, const char *file, int line, const char *func,
 
 
 /********************
+ * context_init
+ ********************/
+static int
+context_init(context_t *ctx, const char *name)
+{
+    if ((ctx->name = STRDUP(name)) == NULL)
+        return -ENOMEM;
+    
+    ctx->format      = default_format;
+    ctx->destination = stderr;
+
+    init_bits(&ctx->bits);
+    init_bits(&ctx->mask);
+
+    ctx->id = ((int)((void *)ctx - (void *)contexts)) / sizeof(*ctx);
+
+    return ctx->id;
+}
+
+
+/********************
  * context_del
  ********************/
 static void
@@ -593,23 +596,6 @@ context_find(const char *name, context_t **deleted)
     }
 
     return NULL;
-}
-
-
-/********************
- * get_default_context
- ********************/
-static context_t *
-get_default_context(void)
-{
-    if (default_context.format == NULL) {
-        default_context.format = STRDUP(default_format);
-        default_context.destination = stderr;
-        init_bits(&default_context.bits);
-        init_bits(&default_context.mask);
-    }
-    
-    return &default_context;
 }
 
 
@@ -1644,6 +1630,39 @@ trace_configure(const char *config)
         
         if (*s == CMDSEP)
             s++;
+    }
+
+    return 0;
+}
+
+
+/********************
+ * trace_show
+ ********************/
+int
+trace_show(char *context, char *buf, size_t bufsize, const char *format)
+{
+    context_t *c;
+    module_t  *m;
+    flag_t    *f;
+    int        nc, nm, nf, on;
+    
+    for (nc = 0, c = contexts; nc < ncontext; nc++, c++) {
+        if (c->name == NULL)
+            continue;
+        
+        for (nm = 0, m = c->modules; nm < c->nmodule; nm++, m++) {
+            if (m->name == NULL)
+                continue;
+            
+            for (nf = 0, f = m->flags; nf < m->nflag; nf++, f++) {
+                if (f->name == NULL)
+                    continue;
+                
+                on = tst_bit(&c->mask, f->bit);
+                printf("%s.%s=%c%s\n", c->name, m->name, on ? '+':'-', f->name);
+            }
+        }
     }
 
     return 0;

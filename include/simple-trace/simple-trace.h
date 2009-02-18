@@ -23,7 +23,7 @@
 #  define TRUE  1
 #endif
 
-#define TRACE_DEFAULT_CONTEXT 127
+#define TRACE_DEFAULT_CONTEXT 0
 #define TRACE_DEFAULT_NAME    "default"
 #define TRACE_DEFAULT_FORMAT  "[%C] "
 
@@ -116,6 +116,7 @@ int  trace_flag_clr(int id);
 int  trace_flag_tst(int id);
 
 int  trace_configure(const char *config);
+int  trace_show(char *context, char *buf, size_t bufsize, const char *format);
 
 int  __trace_printf(int id, const char *file, int line, const char *func,
                     const char *format, ...);
