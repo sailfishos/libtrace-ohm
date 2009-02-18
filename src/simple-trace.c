@@ -1647,6 +1647,11 @@ trace_show(char *context, char *buf, size_t bufsize, const char *format)
     flag_t    *f;
     int        nc, nm, nf, on;
     
+    /* XXX FIXME temporarily just dump to stdout */
+    (void)buf;
+    (void)bufsize;
+    (void)format;
+
     for (nc = 0, c = contexts; nc < ncontext; nc++, c++) {
         if (c->name == NULL)
             continue;
