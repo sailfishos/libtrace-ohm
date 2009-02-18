@@ -1648,6 +1648,7 @@ trace_show(char *context, char *buf, size_t bufsize, const char *format)
     int        nc, nm, nf, on;
     
     /* XXX FIXME temporarily just dump to stdout */
+    (void)context;
     (void)buf;
     (void)bufsize;
     (void)format;
