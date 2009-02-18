@@ -84,6 +84,8 @@ START_TEST(enabled_flag)
 
     fail_unless(trace_context_enable(cid) == 0);
 
+    trace_configure("test=+all");
+
     fail_unless(trace_flag_set(DBG_FOO) == 0);
     fail_unless(trace_flag_set(DBG_FOOBAR) == 0);
 

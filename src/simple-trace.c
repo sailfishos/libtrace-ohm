@@ -1603,7 +1603,7 @@ context_configure(char *context, const char *config)
 int
 trace_configure(const char *config)
 {
-    char        context[MAX_NAME];
+    char        context[MAX_NAME], cfg[1024];
     const char *s;
     char       *d;
     int         l;
@@ -1623,7 +1623,16 @@ trace_configure(const char *config)
             *d++ = *s++;
             l++;
         }
-        *d = '\0';
+        
+        if (*s == '=') {
+            strcpy(context, TRACE_DEFAULT_NAME);
+            cfg[0] = MODSEP;
+            strncpy(cfg + 1, config, sizeof(cfg) - 1);
+            cfg[sizeof(cfg) - 1] = '\0';
+            s = cfg;
+        }
+        else
+            *d = '\0';
         
         if ((s = context_configure(context, s)) == NULL)
             return -1;
