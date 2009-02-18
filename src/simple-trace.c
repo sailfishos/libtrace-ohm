@@ -247,7 +247,7 @@ trace_context_open(const char *name)
             return -ENOSPC;
         if (REALLOC_ARR(contexts, ncontext, ncontext + 1) == NULL)
             return -ENOMEM;
-        ctx = contexts + ncontext;
+        ctx = contexts + ncontext++;
     }
     else
         ctx = deleted;
