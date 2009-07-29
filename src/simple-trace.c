@@ -1254,7 +1254,6 @@ free_bits(bitmap_t *bits)
         free(bits->bits.wptr);
         bits->bits.word = 0;
         bits->nbit      = BITS_PER_LONG;
-		
     }
 }
 
@@ -1266,10 +1265,12 @@ static inline int
 alloc_flag(context_t *ctx)
 {
     bitmap_t *bits = &ctx->bits;
+    bitmap_t *mask = &ctx->mask;
     int       bit  = alloc_bit(bits);
 
     if (bit < 0) {
         realloc_bits(bits, bits->nbit + 1);
+        realloc_bits(mask, mask->nbit + 1);
         bit = alloc_bit(bits);
     }
 
