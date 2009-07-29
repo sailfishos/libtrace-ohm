@@ -1,3 +1,9 @@
+libtrace (0.5.1) unstable; urgency=low
+
+  * Keep alloc and set bitmaps in sync reallocating both.
+
+ -- K. Litkey <krisztian.litkey@nokia.com>  Thu, 30 Jul 2009 02:38:18 +0300
+
 libtrace (0.5.0) unstable; urgency=low
 
   * Legal bug fix: rewrote from scratch.
