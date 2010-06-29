@@ -48,5 +48,7 @@ $(TARBALL):
 	    --exclude '*/.git' $(notdir $(TARDIR)) && \
 	mv /tmp/$(notdir $@) $@
 
+meego-export: $(SPECFILE) $(TARBALL)
+
 rmtar:
 	rm -f $(TARBALL)
