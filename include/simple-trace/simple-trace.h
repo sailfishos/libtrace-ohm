@@ -1,6 +1,8 @@
 #ifndef __SIMPLE_TRACE_H__
 #define __SIMPLE_TRACE_H__
 
+#include <stddef.h>                                 /* NULL */
+#include <sys/types.h>                              /* size_t */
 #include <sys/time.h>
 
 #if !defined(likely) || !defined(unlikely)
