@@ -63,8 +63,7 @@ current-tarball:
 	tar -cvf - --exclude '$(THISDIR)' \
 	           --exclude '.git' . | \
 	tar -C $(TMPDIR)/$(PKGDIR) -xvf - && \
-	tar -C $(TMPDIR) -cvzf $(TARBALL) $(PKGDIR) && \
-	cp $(TMPDIR)/$(TARBALL) . && \
+	tar -C $(TMPDIR) -cvzf $(THISDIR)/$(TARBALL) $(PKGDIR) && \
 	rm -fr $(TMPDIR)
 
 rpm-export: $(SPECFILE) $(TARBALL)
