@@ -28,9 +28,10 @@ Documentation (manual pages, etc.) for the trace library.
 
 
 %prep
-%setup -q -n ##__TARDIR__##
+%setup -q
 
 %build
+./autogen.sh
 %configure --disable-static
 
 %install
