@@ -6,7 +6,7 @@ includedir=@includedir@
 
 Name: trace
 Description: A simple trace library.
-Version: 0.0.0
+Version: @PACKAGE_VERSION@
 Requires:
 Conflicts:
 Libs: -L${libdir} -lsimple-trace
