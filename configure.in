@@ -7,9 +7,12 @@ AC_INIT([libsimple-trace],
         m4_esyscmd([build-aux/git-version-gen .tarball-version]),
         [multimedia at maemo.org])
 
+AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([src/simple-trace.c])
 AC_CONFIG_HEADER([src/config.h])
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
+
+AC_SUBST(ACLOCAL_AMFLAGS, "-I m4")
 
 m4_define(version_major, `echo $VERSION | cut -d. -f1 | cut -d- -f1`)
 m4_define(version_minor, `echo $VERSION | cut -d. -f2 | cut -d- -f1`)
@@ -21,7 +24,9 @@ AC_SUBST(VERSION_MINOR, version_minor)
 AC_SUBST(VERSION_PATCH, version_patch)
 AC_SUBST(VERSION_FULL, version_major.version_minor.version_patch)
 
+# libtool interface version
 LIBTRACE_VERSION_INFO="0:0:0"
+AC_SUBST(LIBTRACE_VERSION_INFO)
 
 # Disable static libraries.
 AC_DISABLE_STATIC
@@ -59,17 +64,17 @@ if test "x$has_check" = "xno"; then
   AC_MSG_WARN([Check framework not found, unit tests are DISABLED.])
 fi
 
-# libtool
-LT_INIT([disable-static])
-AC_SUBST(LIBTRACE_VERSION_INFO)
+# shave
+SHAVE_INIT([build-aux], [enable])
 
-
-AC_CONFIG_FILES([Makefile
-		src/Makefile
-		src/libsimple-trace.pc
-		include/Makefile
-		doc/Makefile
-		tests/Makefile])
+AC_CONFIG_FILES([build-aux/shave
+		 build-aux/shave-libtool
+		 Makefile
+		 src/Makefile
+		 src/libsimple-trace.pc
+		 include/Makefile
+		 doc/Makefile
+		 tests/Makefile])
 AC_OUTPUT
 
 
