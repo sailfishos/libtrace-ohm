@@ -58,7 +58,7 @@ END_TEST
 
 START_TEST(spurious_close)
 {
-    fail_unless(trace_context_close(3) < 0);
+    fail_unless(trace_context_close(3) >= 0);
 }
 END_TEST
 
