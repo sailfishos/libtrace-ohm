@@ -65,7 +65,7 @@ while test "$#" -gt 0; do
         preserved_args="$preserved_args $opt"
 	;;
     *)
-        preserved_args="$preserved_args $opt"
+        preserved_args="$preserved_args ${opt//\"/\\\"}"
         ;;
       esac
 done
