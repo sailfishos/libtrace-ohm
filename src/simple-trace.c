@@ -1124,12 +1124,12 @@ alloc_bit(bitmap_t *bits)
      * find word with free bit, then binary search within that word
      */
     
-    for (i = 0, word = *wptr; i < nw && word == (-1UL); i++, word = *++wptr)
+    for (i = 0, word = *wptr; i < nw && (word = *wptr) == (-1UL); i++, wptr++)
         ;
 
     if (i < nw) {
         i *= BITS_PER_LONG;
-		
+        
         /* XXX TODO: replace me with a BITS_PER_LONG-agnostic loop */
         if ((word & 0xffff) == 0xffff) i += 16, word >>= 16;
         if ((word & 0x00ff) == 0x00ff) i +=  8, word >>= 8;
