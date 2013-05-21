@@ -1,0 +1,10 @@
+* Mon Dec 10 2012 Marko Saukko <marko.saukko@jollamobile.com> - 1.1.8
+- Updated packaging.
+
+* Wed Dec 08 2010 Kalle Lampila <kalle.lampila@cybercom.com> - 1.1.8
+- Version update
+- Packaging now uses spectacle
+- Part of FEA#6701
+
+* Wed Jun 30 2010 Markus Lehtonen <markus.lehtonen@nokia.com> - 0.0.0.git5d5f7169
+- Initial packaging effort
