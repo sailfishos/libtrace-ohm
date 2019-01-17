@@ -20,6 +20,14 @@ Requires:   %{name} = %{version}-%{release}
 %description devel
 Development files for %{name}.
 
+%package doc
+Summary:   Documentation for %{name}
+Group:     Documentation
+Requires:  %{name} = %{version}-%{release}
+
+%description doc
+Man pages for %{name}.
+
 %prep
 %setup -q -n %{name}-%{version}
 
@@ -27,12 +35,18 @@ Development files for %{name}.
 
 %autogen --disable-static
 %configure --disable-static
-make %{?jobs:-j%jobs}
+make %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
 
 %make_install
+
+mkdir -p %{buildroot}%{_docdir}/%{name}-%{version}
+install -m0644 -t %{buildroot}%{_docdir}/%{name}-%{version} \
+        AUTHORS ChangeLog NEWS README
+mv %{buildroot}%{_docdir}/libsimple-trace-doc/libsimple-trace.html \
+   %{buildroot}%{_docdir}/%{name}-%{version}/
 
 %post -p /sbin/ldconfig
 
@@ -41,12 +55,15 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %{_libdir}/libsimple-trace*.so.*
-%doc COPYING AUTHORS INSTALL README NEWS ChangeLog
+%license COPYING
 
 %files devel
 %defattr(-,root,root,-)
 %{_includedir}/simple-trace
 %{_libdir}/libsimple-trace*.so
 %{_libdir}/pkgconfig/libsimple-trace*
-%{_mandir}/man3/*
-%doc %{_docdir}/libsimple-trace-doc/*
+
+%files doc
+%defattr(-,root,root,-)
+%{_mandir}/man3/libsimple-trace.*
+%{_docdir}/%{name}-%{version}
