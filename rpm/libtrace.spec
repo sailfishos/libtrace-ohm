@@ -3,8 +3,8 @@ Summary:    A simple tracing library with keyword filtering support
 Version:    1.1.8
 Release:    0
 Group:      System/Libraries
-License:    LGPLv2.1
-URL:        http://meego.gitorious.org/maemo-multimedia/trace
+License:    LGPLv2
+URL:        https://git.sailfishos.org/mer-core/libtrace-ohm
 Source0:    %{name}-%{version}.tar.gz
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
