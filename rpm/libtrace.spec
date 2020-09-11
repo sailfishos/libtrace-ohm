@@ -41,6 +41,7 @@ make %{?_smp_mflags}
 rm -rf %{buildroot}
 
 %make_install
+rm -f %{buildroot}/%{_libdir}/*.la
 
 mkdir -p %{buildroot}%{_docdir}/%{name}-%{version}
 install -m0644 -t %{buildroot}%{_docdir}/%{name}-%{version} \
