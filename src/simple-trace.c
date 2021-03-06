@@ -27,6 +27,7 @@ USA.
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include <limits.h>
 #include <locale.h>
 #include <sys/time.h>
 
@@ -43,6 +44,8 @@ USA.
 
 #define BITS_PER_LONG  ((int)sizeof(unsigned long) * 8)
 #define BYTES_PER_LONG ((int)sizeof(unsigned long))
+
+#define BIT_MASK_GEN(len) ((unsigned long) ((1UL << (len))) - 1)
 
 #define MAX_CONTEXTS  127
 #define CTX_SHIFT      24
@@ -1128,17 +1131,16 @@ alloc_bit(bitmap_t *bits)
         ;
 
     if (i < nw) {
+        int j;
         i *= BITS_PER_LONG;
-        
-        /* XXX TODO: replace me with a BITS_PER_LONG-agnostic loop */
-        if ((word & 0xffff) == 0xffff) i += 16, word >>= 16;
-        if ((word & 0x00ff) == 0x00ff) i +=  8, word >>= 8;
-        if ((word & 0x000f) == 0x000f) i +=  4, word >>= 4;
-        if ((word & 0x0003) == 0x0003) i +=  2, word >>= 2;
-        if ( word & 0x0001)            i +=  1, word >>= 1;
 
-        *wptr |= (0x1 << (i & (BITS_PER_LONG - 1)));
-        
+        for (j = BITS_PER_LONG / 2; j > 0; j /= 2) {
+            if ((word & (BIT_MASK_GEN(j))) == (BIT_MASK_GEN(j)))
+                i += j, word >>= j;
+        }
+
+        *wptr |= (0x1UL << (i & (BITS_PER_LONG - 1)));
+
         return i;
     }
 
@@ -1182,7 +1184,7 @@ clr_bit(bitmap_t *bits, int i)
         else
             wptr = bits->bits.wptr + (i / BITS_PER_LONG);
 
-        *wptr &= ~(0x1 << (i & (BITS_PER_LONG - 1)));
+        *wptr &= ~(0x1UL << (i & (BITS_PER_LONG - 1)));
         return 0;
     }
     else
