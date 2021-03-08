@@ -8,6 +8,8 @@ URL:        https://git.sailfishos.org/mer-core/libtrace-ohm
 Source0:    %{name}-%{version}.tar.gz
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
+BuildRequires: automake
+BuildRequires: libtool
 
 %description
 A simple tracing library with keyword filtering support.
