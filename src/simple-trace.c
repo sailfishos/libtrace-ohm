@@ -1345,8 +1345,11 @@ flip_flag(char *context, char *module, char *flag)
     int        nctx, nmod, nflg, off = FALSE;
 
     switch (flag[0]) {
-    case '-': off = TRUE;
-    case '+': flag++;
+    case '-':
+        off = TRUE;
+        /* fall through */
+    case '+':
+        flag++;
     }
 
     /* pick all or the named context */
