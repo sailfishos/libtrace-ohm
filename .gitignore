@@ -1,0 +1,10 @@
+Makefile
+Makefile.in
+*.o
+*.so
+*.so.*
+.libs
+*.la
+*.lo
+autom4te.cache
+/m4
